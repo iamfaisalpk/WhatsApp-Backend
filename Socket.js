@@ -1,62 +1,96 @@
 import { Server as SocketIOServer } from "socket.io";
 import User from "./Models/User.js";
+import Message from "./Models/Message.js";
+import Conversation from "./Models/Conversation.js";
 
 export function setupSocket(server, app) {
-    const io = new SocketIOServer(server, {
+const io = new SocketIOServer(server, {
     cors: {
         origin: "*",
         methods: ["GET", "POST"],
     },
 });
 
-    const sessionSockets = new Map();
+    const onlineUsers = new Map();
 
-    io.on("connection", (socket) => {
+io.on("connection", (socket) => {
     console.log(`Socket connected: ${socket.id}`);
 
-    // User joins after login
     socket.on("user-online", async (userId) => {
-        try {
+    if (!userId) return;
+        onlineUsers.set(userId, socket.id);
+    try {
         await User.findByIdAndUpdate(userId, {
             isOnline: true,
         });
-        console.log(`User ${userId} is online`);
+        console.log(`User ${userId} marked online`);
     } catch (error) {
-        console.error("user-online error:", error);
+        console.error("user-online error:", error.message);
     }
     });
 
-    // Join specific chat room or session
-    socket.on("joinSession", (sessionId) => {
-        console.log(`Socket ${socket.id} joining session: ${sessionId}`);
-        socket.join(sessionId);
-        sessionSockets.set(sessionId, socket.id);
+    socket.on("join-chat", (conversationId) => {
+    if (conversationId) {
+        socket.join(conversationId);
+        console.log(`Socket ${socket.id} joined conversation: ${conversationId}`);
+    }
     });
 
-    // Handle disconnection
+    socket.on("new-message", async (messageData) => {
+        const { conversationId, senderId, text, media } = messageData;
+
+    try {
+        const newMessage = await Message.create({
+            conversationId,
+            sender: senderId,
+            text,
+            media,
+        });
+
+
+        await Conversation.findByIdAndUpdate(conversationId, {
+            lastMessage: {
+            text: newMessage.text,
+            sender: newMessage.sender,
+            timestamp: newMessage.createdAt,
+        },
+        });
+
+
+        io.to(conversationId).emit("message-received", newMessage);
+        console.log(`New message in ${conversationId}`);
+    } catch (error) {
+        console.error("Error sending message:", error.message);
+    }
+    });
+
+    socket.on("typing", ({ conversationId, userId }) => {
+        socket.to(conversationId).emit("typing", userId);
+    });
+
+    socket.on("stop-typing", ({ conversationId, userId }) => {
+        socket.to(conversationId).emit("stop-typing", userId);
+    });
+
     socket.on("disconnect", async () => {
         console.log(`Socket disconnected: ${socket.id}`);
-        for (const [sessionId, sockId] of sessionSockets.entries()) {
-        if (sockId === socket.id) {
-            sessionSockets.delete(sessionId);
-            break;
-        }
-        }
 
-        // Set user offline if tracked (optional enhancement)
-    try {
-        const user = await User.findOneAndUpdate(
-            { isOnline: true },
-            { isOnline: false, lastSeen: new Date() },
-            { new: true }
-        );
-        if (user) console.log(`User ${user._id} went offline`);
-    } catch (err) {
-        console.error("Disconnect update error:", err);
+        const userId = [...onlineUsers.entries()].find(([, sid]) => sid === socket.id)?.[0];
+
+    if (userId) {
+        onlineUsers.delete(userId);
+        try {
+            await User.findByIdAndUpdate(userId, {
+            isOnline: false,
+            lastSeen: new Date(),
+            });
+            console.log(`🔕 User ${userId} marked offline`);
+        } catch (err) {
+            console.error("Disconnect update error:", err.message);
+        }
     }
     });
 });
 
-    // Attach io to app.locals
     app.locals.io = io;
 }
