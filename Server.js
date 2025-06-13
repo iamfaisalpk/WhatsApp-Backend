@@ -9,7 +9,8 @@ import morgan from "morgan";
 import connectDB from "./config/db.js";
 import authRoutes from "./Routes/authRoutes.js";
 import profileRoutes from "./Routes/profileRoutes.js";
-import messageRoutes from "./Routes/messageRoutes.js"
+import messageRoutes from "./Routes/messageRoutes.js";
+import communityRoutes from "./Routes/communityRoutes.js"
 import { setupSocket } from "./Socket.js";
 
 
@@ -43,6 +44,7 @@ res.status(200).json({
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/messages",messageRoutes);
+app.use("/api/community",communityRoutes);  
 
 
 setupSocket(server, app);
