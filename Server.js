@@ -10,7 +10,8 @@ import connectDB from "./config/db.js";
 import authRoutes from "./Routes/authRoutes.js";
 import profileRoutes from "./Routes/profileRoutes.js";
 import messageRoutes from "./Routes/messageRoutes.js";
-import communityRoutes from "./Routes/communityRoutes.js"
+import communityRoutes from "./Routes/communityRoutes.js";
+import errorHandler from "./Middlewares/errorHandler.js";
 import { setupSocket } from "./Socket.js";
 
 
@@ -26,6 +27,8 @@ app.use(cors({
     origin: ["http://localhost:5173", "http://localhost:3000"],
     credentials: true,
 }));
+app.use(errorHandler)
+
 
 if (process.env.NODE_ENV === "development") {
     app.use(morgan("dev")); 

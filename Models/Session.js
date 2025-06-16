@@ -2,9 +2,10 @@ import mongoose from "mongoose";
 
 const sessionSchema = new mongoose.Schema({
     sessionId: { type: String, required: true, unique: true },
-    phone: { type: String, default: null }, 
-    otp: { type: String, default: null }, 
+    phone: { type: String, default: null },
+    otp: { type: String, default: null },
     status: { type: String, enum: ["pending", "verified"], default: "pending" },
+    attempts: { type: Number, default: 0 }, 
     createdAt: { type: Date, default: Date.now, expires: 600 }, 
 });
 

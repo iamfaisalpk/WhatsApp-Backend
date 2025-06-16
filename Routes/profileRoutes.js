@@ -8,8 +8,15 @@ import {
 
 const router = express.Router();
 
+// Get current user profile
 router.get('/me', authMiddleware, getMyProfile);
 
-router.put('/update', authMiddleware, upload.single('profilePic'), updateMyProfile);
+// Update profile with optional image upload
+router.put(
+    '/update',
+    authMiddleware,
+    upload.single('profilePic'),
+    updateMyProfile
+);
 
 export default router;

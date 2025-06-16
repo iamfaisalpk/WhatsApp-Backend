@@ -11,7 +11,8 @@ const router = express.Router();
 
 router.post('/', authMiddleware, upload.single('media'), sendMessage);
 
-router.get('/:conversationId', authMiddleware, getMessages);
 router.put('/seen', authMiddleware, markAsSeen);
+router.get('/:conversationId', authMiddleware, getMessages);
+
 
 export default router;

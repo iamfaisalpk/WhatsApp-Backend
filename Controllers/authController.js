@@ -4,6 +4,7 @@ import client from '../config/twilioClient.js';
 import User from '../Models/User.js';
 import Otp from '../Models/Otp.js';
 import { getAllOtps, clearAllOtps } from '../Utils/devUtils.js';
+import jwt from 'jsonwebtoken'
 
 const TEST_NUMBERS = ['+15005550006', '+15005550001', '+917994010513'];
 
@@ -156,14 +157,24 @@ export const verifyOtp = async (req, res) => {
       user.isVerified = true;
       user.lastLogin = new Date();
     }
+
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'OTP verified successfully',
-      phone: formattedPhone,
-      user: { id: user._id, phone: user.phone, isVerified: user.isVerified }
-    });
+// Create JWT token
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+return res.status(200).json({
+  success: true,
+  message: 'OTP verified successfully',
+  user: {
+    id: user._id,
+    phone: user.phone,
+    isVerified: user.isVerified,
+    token, 
+  }
+});
+
+
   } catch (error) {
     console.error('verifyOtp error:', error);
     res.status(500).json({
@@ -173,6 +184,7 @@ export const verifyOtp = async (req, res) => {
     });
   }
 };
+
 
 // OTP status (for debugging/dev)
 export const getOtpStatus = async (req, res) => {
