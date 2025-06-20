@@ -1,210 +1,231 @@
 import dotenv from 'dotenv';
 dotenv.config();
+
 import client from '../config/twilioClient.js';
 import User from '../Models/User.js';
 import Otp from '../Models/Otp.js';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 import { getAllOtps, clearAllOtps } from '../Utils/devUtils.js';
-import jwt from 'jsonwebtoken'
 
 const TEST_NUMBERS = ['+15005550006', '+15005550001', '+917994010513'];
 
-// Helper to generate a 6-digit OTP
-const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const formatPhoneNumber = (rawPhone) => {
+  let phone = rawPhone.trim();
+
+  if (phone.startsWith('+91') && phone.length === 13) {
+    return phone;
+  }
+
+  phone = phone.replace(/^in/, '').replace(/\D/g, '');
+
+  if (!phone.startsWith('91')) {
+    phone = '91' + phone;
+  }
+
+  return '+' + phone;
 };
 
 // Send OTP
 export const sendOtp = async (req, res) => {
   try {
     const { phone } = req.body;
+
     if (!phone) {
       return res.status(400).json({ success: false, message: 'Phone number is required' });
     }
 
-    let formattedPhone = phone.trim();
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = '+' + formattedPhone;
-    }
-
-    // Generate new OTP
+    const formattedPhone = formatPhoneNumber(phone);
     const otp = generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); 
+    const hashedOtp = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const sessionId = uuidv4();
 
-    // Save to MongoDB
-    await Otp.findOneAndUpdate(
-      { phone: formattedPhone },
-      { code: otp, expiresAt, attempts: 0 },
-      { upsert: true, new: true }
-    );
+    // ✅ Delete existing OTPs for the same phone number
+    await Otp.deleteMany({ phone: formattedPhone });
 
-    if (process.env.NODE_ENV === 'development' && formattedPhone !== '+917994010513') {
+    // ✅ Save new OTP
+    const newOtp = new Otp({
+      phone: formattedPhone,
+      code: hashedOtp,
+      expiresAt,
+      sessionId,
+    });
+
+    await newOtp.save();
+    console.log("✅ OTP saved to DB:", formattedPhone, sessionId);
+
+    // ✅ Dev/test mode: return OTP
+    if (process.env.NODE_ENV === 'development' || TEST_NUMBERS.includes(formattedPhone)) {
       return res.status(200).json({
         success: true,
-        message: 'Development mode: OTP generated',
+        message: 'OTP generated (development mode)',
         phone: formattedPhone,
         otp,
-        developmentMode: true
+        sessionId,
+        developmentMode: true,
       });
     }
 
-    if (!process.env.TWILIO_PHONE_NUMBER) {
-      return res.status(500).json({
-        success: false,
-        message: 'Twilio phone number missing'
-      });
-    }
-
-    try {
-      const message = await client.messages.create({
-        body: `Your WhatsApp verification code is: ${otp}. It will expire in 10 minutes.`,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: formattedPhone
-      });
-
-      res.status(200).json({
-        success: true,
-        message: 'OTP sent successfully',
-        phone: formattedPhone,
-        messageId: message.sid
-      });
-    } catch (twilioError) {
-      if (process.env.NODE_ENV === 'development') {
-        return res.status(200).json({
-          success: true,
-          message: 'OTP generated (SMS failed)',
-          phone: formattedPhone,
-          otp,
-          developmentMode: true,
-          error: 'SMS service unavailable'
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to send OTP',
-        details: twilioError.message
-      });
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      details: error.message
+    // Production: send via Twilio
+    const message = await client.messages.create({
+      body: `Your WhatsApp verification code is: ${otp}. It will expire in 10 minutes.`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: formattedPhone,
     });
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully',
+      phone: formattedPhone,
+      messageId: message.sid,
+      sessionId,
+    });
+
+  } catch (error) {
+    console.error('💥 [SEND OTP] Error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
   }
 };
 
 // Verify OTP
 export const verifyOtp = async (req, res) => {
   try {
-    const { phone, otp } = req.body || {};
-    if (!phone || !otp) {
+    const { phone, otp, sessionId } = req.body;
+
+    // Step 1: Validate inputs
+    if (!phone || !otp || !sessionId) {
       return res.status(400).json({
         success: false,
-        message: 'Phone and OTP are required'
+        message: "Phone, OTP, and sessionId are required",
       });
     }
 
-    let formattedPhone = phone.trim();
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = '+' + formattedPhone;
-    }
+    // Step 2: Format phone
+    const formattedPhone = formatPhoneNumber(phone);
+    console.log("🔍 Verifying OTP for:", formattedPhone, "Session:", sessionId);
 
-    const otpEntry = await Otp.findOne({ phone: formattedPhone });
+    // ✅ Step 3: Find OTP using both phone and sessionId
+    const otpEntry = await Otp.findOne({ phone: formattedPhone, sessionId });
+
     if (!otpEntry) {
       return res.status(400).json({
         success: false,
-        message: 'OTP not found or expired'
+        message: "OTP not found or expired",
       });
     }
 
+    // Step 4: Check expiry
     if (new Date() > otpEntry.expiresAt) {
-      await Otp.deleteOne({ phone: formattedPhone });
+      await Otp.deleteOne({ phone: formattedPhone, sessionId });
       return res.status(400).json({
         success: false,
-        message: 'OTP has expired'
+        message: "OTP expired",
       });
     }
 
+    // Step 5: Check attempts
     if (otpEntry.attempts >= 3) {
-      await Otp.deleteOne({ phone: formattedPhone });
+      await Otp.deleteOne({ phone: formattedPhone, sessionId });
       return res.status(400).json({
         success: false,
-        message: 'Too many failed attempts'
+        message: "Too many attempts",
       });
     }
 
-    if (otpEntry.code !== otp.trim()) {
+    // Step 6: Compare OTP
+    const isMatch = await bcrypt.compare(otp.toString().trim(), otpEntry.code);
+    if (!isMatch) {
       otpEntry.attempts += 1;
       await otpEntry.save();
       return res.status(400).json({
         success: false,
-        message: 'Invalid OTP',
-        attemptsRemaining: 3 - otpEntry.attempts
+        message: "Invalid OTP",
+        attemptsRemaining: 3 - otpEntry.attempts,
       });
     }
 
-    // OTP verified
-    await Otp.deleteOne({ phone: formattedPhone });
+    // Step 7: OTP matched - delete it
+    await Otp.deleteOne({ phone: formattedPhone, sessionId });
 
+    // Step 8: Create or update user
     let user = await User.findOne({ phone: formattedPhone });
+
     if (!user) {
-      user = new User({
+      user = await User.create({
         phone: formattedPhone,
         isVerified: true,
-        lastLogin: new Date()
+        lastLogin: new Date(),
+        isOnline: true,
       });
+      console.log(" New user created:", user._id.toString());
     } else {
       user.isVerified = true;
       user.lastLogin = new Date();
+      user.isOnline = true;
+      await user.save();
+      console.log("Existing user updated:", user._id.toString());
     }
 
-    await user.save();
+    // Step 9: Generate token
+    const token = jwt.sign(
+      { id: user._id.toString(), phone: user.phone },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-// Create JWT token
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-return res.status(200).json({
-  success: true,
-  message: 'OTP verified successfully',
-  user: {
-    id: user._id,
-    phone: user.phone,
-    isVerified: user.isVerified,
-    token, 
-  }
-});
-
+    // Step 10: Respond
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified successfully",
+      sessionId,
+      user: {
+        id: user._id,
+        phone: user.phone,
+        name: user.name,
+        about: user.about,
+        profilePic: user.profilePic,
+        isVerified: user.isVerified,
+        isOnline: user.isOnline,
+        lastLogin: user.lastLogin,
+      },
+      token,
+    });
 
   } catch (error) {
-    console.error('verifyOtp error:', error);
-    res.status(500).json({
+    console.error("[VERIFY OTP] Error:", error);
+    return res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      details: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
 
 
-// OTP status (for debugging/dev)
+
+// ⚙️ Development-only
 export const getOtpStatus = async (req, res) => {
   const { phone } = req.query;
-  let formattedPhone = phone?.trim();
-  if (formattedPhone && !formattedPhone.startsWith('+')) {
-    formattedPhone = '+' + formattedPhone;
-  }
+  if (!phone) return res.json({ status: 'phone_required' });
+
+  const formattedPhone = formatPhoneNumber(phone);
 
   const otpEntry = await Otp.findOne({ phone: formattedPhone });
-  if (!otpEntry) {
-    return res.json({ status: 'not_found' });
-  }
+  if (!otpEntry) return res.json({ status: 'not_found' });
 
   const isExpired = new Date() > otpEntry.expiresAt;
-  res.json({
+  return res.json({
     status: isExpired ? 'expired' : 'active',
     attempts: otpEntry.attempts,
     expiresIn: Math.max(0, otpEntry.expiresAt - Date.now()),
-    ...(process.env.NODE_ENV === 'development' && { otp: otpEntry.code, developmentMode: true })
+    ...(process.env.NODE_ENV === 'development' && {
+      otp: otpEntry.code,
+      developmentMode: true
+    })
   });
 };
 
@@ -214,11 +235,11 @@ export const getDevelopmentStatus = (req, res) => {
     environment: process.env.NODE_ENV || 'production',
     testNumbers: process.env.NODE_ENV === 'development' ? TEST_NUMBERS : 'Hidden',
     message: process.env.NODE_ENV === 'development'
-      ? 'Development mode active - OTPs will be shown directly'
-      : 'Production mode - All OTPs sent via SMS',
+      ? 'Development mode active - OTPs shown directly'
+      : 'Production mode - OTPs sent via SMS',
     timestamp: new Date().toISOString()
   });
 };
 
-// Dev endpoints reuse
+// Debug utils
 export { getAllOtps, clearAllOtps };

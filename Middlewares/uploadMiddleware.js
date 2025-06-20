@@ -2,31 +2,48 @@ import multer from 'multer';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import cloudinary from '../config/cloudinary.js';
 
-// Configure Cloudinary Storage
+// Test Cloudinary connection first
+console.log(' Testing Cloudinary configuration...');
+console.log('Cloud Name:', process.env.CLOUDINARY_CLOUD_NAME ? ' Set' : ' Missing');
+console.log('API Key:', process.env.CLOUDINARY_API_KEY ? ' Set' : ' Missing');
+console.log('API Secret:', process.env.CLOUDINARY_API_SECRET ? ' Set' : ' Missing');
+
+// Simplified storage configuration
 const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
+  cloudinary: cloudinary,
+  params: {
     folder: 'whatsapp-clone',
     allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
     transformation: [{ width: 500, height: 500, crop: 'limit' }],
-},
+  },
 });
 
-// Optional: File filter for extra safety
+// Simple file filter
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (allowedTypes.includes(file.mimetype)) {
+  console.log(' Processing file:', file.originalname, file.mimetype);
+  
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  
+  if (allowedTypes.includes(file.mimetype)) {
+    console.log(' File type accepted');
     cb(null, true);
-} else {
-    cb(new Error('Only JPEG, PNG, and WEBP files are allowed'));
-}
+  } else {
+    console.log(' File type rejected:', file.mimetype);
+    cb(new Error(`File type not allowed: ${file.mimetype}`));
+  }
 };
 
-// Setup Multer
+// Simple multer setup
 const upload = multer({ 
-    storage,
-    limits: { fileSize: 2 * 1024 * 1024 }, 
-    fileFilter,
+  storage,
+  limits: { 
+    fileSize: 5 * 1024 * 1024, 
+  },
+  fileFilter,
 });
 
+// Create the uploadSingle middleware
+export const uploadSingle = (fieldName) => upload.single(fieldName);
+
+// Export the upload instance as default
 export default upload;
