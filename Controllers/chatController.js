@@ -1,5 +1,4 @@
 import Conversation from "../Models/Conversation.js";
-import User from "../Models/User.js";
 
 
 export const accessChat = async (req, res) => {

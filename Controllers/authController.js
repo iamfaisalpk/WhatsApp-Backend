@@ -44,10 +44,10 @@ export const sendOtp = async (req, res) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     const sessionId = uuidv4();
 
-    // ✅ Delete existing OTPs for the same phone number
+    // Delete existing OTPs for the same phone number
     await Otp.deleteMany({ phone: formattedPhone });
 
-    // ✅ Save new OTP
+    //  Save new OTP
     const newOtp = new Otp({
       phone: formattedPhone,
       code: hashedOtp,
@@ -56,9 +56,9 @@ export const sendOtp = async (req, res) => {
     });
 
     await newOtp.save();
-    console.log("✅ OTP saved to DB:", formattedPhone, sessionId);
+    console.log(" OTP saved to DB:", formattedPhone, sessionId);
 
-    // ✅ Dev/test mode: return OTP
+    //  Dev/test mode: return OTP
     if (process.env.NODE_ENV === 'development' || TEST_NUMBERS.includes(formattedPhone)) {
       return res.status(200).json({
         success: true,
@@ -86,7 +86,7 @@ export const sendOtp = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('💥 [SEND OTP] Error:', error);
+    console.error(' [SEND OTP] Error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
   }
 };
@@ -108,7 +108,7 @@ export const verifyOtp = async (req, res) => {
     const formattedPhone = formatPhoneNumber(phone);
     console.log("🔍 Verifying OTP for:", formattedPhone, "Session:", sessionId);
 
-    // ✅ Step 3: Find OTP using both phone and sessionId
+    //  Step 3: Find OTP using both phone and sessionId
     const otpEntry = await Otp.findOne({ phone: formattedPhone, sessionId });
 
     if (!otpEntry) {
@@ -207,7 +207,7 @@ export const verifyOtp = async (req, res) => {
 
 
 
-// ⚙️ Development-only
+//  Development-only
 export const getOtpStatus = async (req, res) => {
   const { phone } = req.query;
   if (!phone) return res.json({ status: 'phone_required' });
