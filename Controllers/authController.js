@@ -106,7 +106,7 @@ export const verifyOtp = async (req, res) => {
 
     // Step 2: Format phone
     const formattedPhone = formatPhoneNumber(phone);
-    console.log("🔍 Verifying OTP for:", formattedPhone, "Session:", sessionId);
+    console.log(" Verifying OTP for:", formattedPhone, "Session:", sessionId);
 
     //  Step 3: Find OTP using both phone and sessionId
     const otpEntry = await Otp.findOne({ phone: formattedPhone, sessionId });

@@ -28,9 +28,11 @@ try {
     }
     });
 
+    const populateMessage = await newMessage.populate("sender","name profilePic")
+
     req.app.locals.io.to(conversationId).emit("newMessage", newMessage);
 
-    res.status(201).json({ success: true, message: newMessage });
+    res.status(201).json({ success: true, message: populateMessage });
 } catch (error) {
     console.error("Send message error:", error);
     res.status(500).json({ success: false, message: "Server error" });

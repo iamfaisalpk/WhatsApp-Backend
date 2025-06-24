@@ -136,3 +136,33 @@ export const removeFromGroup = async (req, res) => {
         res.status(500).json({ message: "Failed to remove user" });
     }
 };
+
+export const deleteChat = async (req, res) => {
+    const { chatId } = req.params;
+    try {
+    const chat = await Conversation.findById(chatId);
+    if (!chat) return res.status(404).json({ message: "Chat not found" });
+
+    await chat.deleteOne(); 
+
+    res.status(200).json({ success: true, message: "Chat deleted" });
+    } catch (error) {
+    console.error("Delete Chat Error:", error);
+    res.status(500).json({ message: "Failed to delete chat" });
+}
+};
+
+export const leaveGroup = async (req, res) => {
+    const { chatId } = req.body;
+    try {
+    const updatedChat = await Conversation.findByIdAndUpdate(
+        chatId,
+        { $pull: { members: req.user.id } },
+        { new: true }
+    );
+    res.status(200).json({ success: true, updatedChat });
+} catch (error) {
+    res.status(500).json({ message: "Failed to leave group" });
+}
+};
+

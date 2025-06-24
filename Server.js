@@ -11,6 +11,7 @@ import authRoutes from "./Routes/authRoutes.js";
 import profileRoutes from "./Routes/profileRoutes.js";
 import messageRoutes from "./Routes/messageRoutes.js";
 import communityRoutes from "./Routes/communityRoutes.js";
+import chatRoutes from "./Routes/chatRoutes.js";
 import errorHandler from "./Middlewares/errorHandler.js";
 import { setupSocket } from "./Socket.js";
 
@@ -45,7 +46,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/community", communityRoutes);
-
+app.use("/api/chat",chatRoutes)
 
 app.use(errorHandler);
 
