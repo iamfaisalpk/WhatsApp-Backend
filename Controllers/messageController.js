@@ -48,6 +48,7 @@ try {
         .populate("sender", "name profilePic")
         .sort({ createdAt: 1 });
 
+        
     res.status(200).json(messages);
 } catch (error) {
     console.error("Get messages error:", error);
