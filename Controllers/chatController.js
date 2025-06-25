@@ -12,7 +12,7 @@ export const accessChat = async (req, res) => {
         let chat = await Conversation.findOne({
             isGroup: false,
             members: { $all: [req.user.id, userId], $size: 2 }
-        }).populate("members", "-otp -__v");
+        }).populate("members", "name profilePic isOnline lastSeen");
 
         if (chat) {
             return res.status(200).json({ success: true, chat });
@@ -24,7 +24,7 @@ export const accessChat = async (req, res) => {
         });
 
         const fullChat = await Conversation.findById(newChat._id)
-            .populate("members", "-otp -__v");
+            .populate("members", "name profilePic isOnline lastSeen");
 
         return res.status(201).json({ success: true, chat: fullChat });
 
@@ -39,7 +39,7 @@ export const fetchChats = async (req, res) => {
         const chats = await Conversation.find({
             members: req.user.id
         })
-            .populate("members", "-otp -__v")
+            .populate("members", "name profilePic isOnline lastSeen")
             .populate("groupAdmin", "-otp -__v")
             .sort({ updatedAt: -1 });
 
@@ -70,7 +70,7 @@ export const createGroupChat = async (req, res) => {
         });
 
         const fullGroupChat = await Conversation.findById(groupChat._id)
-            .populate("members", "-otp -__v")
+            .populate("members", "name profilePic isOnline lastSeen")
             .populate("groupAdmin", "-otp -__v");
 
         res.status(201).json({ success: true, group: fullGroupChat });
@@ -90,7 +90,7 @@ export const renameGroup = async (req, res) => {
             { groupName },
             { new: true }
         )
-            .populate("members", "-otp -__v")
+            .populate("members", "name profilePic isOnline lastSeen")
             .populate("groupAdmin", "-otp -__v");
 
         res.status(200).json({ success: true, updatedChat });
@@ -109,7 +109,7 @@ export const addToGroup = async (req, res) => {
             { $push: { members: userId } },
             { new: true }
         )
-            .populate("members", "-otp -__v")
+            .populate("members", "name profilePic isOnline lastSeen")
             .populate("groupAdmin", "-otp -__v");
 
         res.status(200).json({ success: true, updatedChat });
@@ -128,7 +128,7 @@ export const removeFromGroup = async (req, res) => {
             { $pull: { members: userId } },
             { new: true }
         )
-            .populate("members", "-otp -__v")
+            .populate("members", "name profilePic isOnline lastSeen")
             .populate("groupAdmin", "-otp -__v");
 
         res.status(200).json({ success: true, updatedChat });
@@ -160,9 +160,21 @@ export const leaveGroup = async (req, res) => {
         { $pull: { members: req.user.id } },
         { new: true }
     );
-    res.status(200).json({ success: true, updatedChat });
+    res.status(200).json({ success: true, chat: updatedChat });
 } catch (error) {
     res.status(500).json({ message: "Failed to leave group" });
 }
 };
+
+export const clearChat = async (req, res) => {
+    const { chatId } = req.params;
+    try {
+    await Message.deleteMany({ conversationId: chatId });
+    res.status(200).json({ success: true, message: "Chat cleared" });
+} catch (error) {
+    console.error("Clear Chat Error:", error);
+    res.status(500).json({ message: "Failed to clear chat" });
+}
+};
+
 

@@ -30,7 +30,6 @@ const onlineUsers = new Map();
     }
     });
 
-    //  Join specific chat room
     socket.on("join-chat", (conversationId) => {
     if (conversationId) {
         socket.join(conversationId);
@@ -38,32 +37,35 @@ const onlineUsers = new Map();
     }
     });
 
-    // Handle new message
-    socket.on("new-message", async (messageData) => {
-        const { conversationId, senderId, text, media } = messageData;
+socket.on("new-message", async (messageData) => {
+  const { conversationId, senderId, text, media } = messageData;
 
-        try {
-        const newMessage = await Message.create({
-            conversationId,
-            sender: senderId,
-            text,
-            media,
-        });
-
-        await Conversation.findByIdAndUpdate(conversationId, {
-            lastMessage: {
-            text: newMessage.text || "📎 Media",
-            sender: newMessage.sender,
-            timestamp: newMessage.createdAt,
-        },
-        });
-
-        io.to(conversationId).emit("message-received", newMessage);
-        console.log(` New message in ${conversationId}`);
-    } catch (error) {
-        console.error("new-message error:", error.message);
-    }
+  try {
+    const newMessage = await Message.create({
+        conversationId,
+        sender: senderId,
+        text,
+        media,
     });
+
+    const populatedMsg = await newMessage.populate("sender", "name profilePic");
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+        lastMessage: {
+        text: populatedMsg.text || "📎 Media",
+        sender: populatedMsg.sender,
+        timestamp: populatedMsg.createdAt,
+    },
+    });
+
+    // Emit to users in the room
+    io.to(conversationId).emit("message-received", populatedMsg);
+    console.log(` New message in ${conversationId}`);
+} catch (error) {
+    console.error("new-message error:", error.message);
+}
+});
+
 
     // Typing indicators
     socket.on("typing", ({ conversationId, userId }) => {

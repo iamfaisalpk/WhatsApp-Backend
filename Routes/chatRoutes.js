@@ -7,8 +7,8 @@ import {
     renameGroup,
     addToGroup,
     removeFromGroup,
-    deleteChat,
-    leaveGroup
+    leaveGroup,
+    clearChat
 } from '../Controllers/chatController.js';
 import { groupAvatarUpload } from '../Utils/multerSetup.js'; 
 
@@ -20,10 +20,10 @@ router.get('/', authMiddleware, fetchChats);
 
 router.post('/group', authMiddleware, groupAvatarUpload.single('groupAvatar'), createGroupChat);
 
-router.delete('/:chatId', authMiddleware, deleteChat);
 router.put('/group-leave', authMiddleware, leaveGroup);
 router.put('/rename', authMiddleware, renameGroup);
 router.put('/group-add', authMiddleware, addToGroup);
 router.put('/group-remove', authMiddleware, removeFromGroup);
+router.delete("/clear/:chatId", authMiddleware, clearChat)
 
 export default router;
