@@ -2,8 +2,12 @@ import Message from "../Models/Message.js";
 import Conversation from "../Models/Conversation.js";
 import { uploadToCloudinary } from "../Utils/uploadToCloudinary.js";
 
+
 export const sendMessage = async (req, res) => {
   try {
+    console.log("📥 Incoming request body:", req.body);
+    console.log("📎 Incoming files:", req.files);
+
     const { conversationId, text, duration, replyTo, tempId } = req.body;
     const senderId = req.user.id;
 
@@ -20,12 +24,10 @@ export const sendMessage = async (req, res) => {
     let media = null;
     let voiceNote = null;
 
-    // ✅ Media upload
     if (mediaFile) {
-      const uploadResult = await uploadToCloudinary(mediaFile, "whatsapp-clone");
       const fileType = mediaFile.mimetype;
       media = {
-        url: uploadResult.secure_url,
+        url: mediaFile.path, 
         type: fileType.startsWith("image")
           ? "image"
           : fileType.startsWith("video")
@@ -36,16 +38,13 @@ export const sendMessage = async (req, res) => {
       };
     }
 
-    // ✅ Voice note upload
     if (voiceNoteFile) {
-      const uploadResult = await uploadToCloudinary(voiceNoteFile, "whatsapp-clone");
       voiceNote = {
-        url: uploadResult.secure_url,
+        url: voiceNoteFile.path, 
         duration: Number(duration) || 0,
       };
     }
 
-    // ✅ Create and save message with tempId
     const newMessage = await Message.create({
       conversationId,
       sender: senderId,
@@ -55,10 +54,9 @@ export const sendMessage = async (req, res) => {
       replyTo: replyTo || null,
       seenBy: [senderId],
       status: "sent",
-      tempId: tempId || null, // 💡 Must save tempId to match optimistic message
+      tempId: tempId || null,
     });
 
-    // ✅ Update lastMessage in conversation
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: {
         text:
@@ -77,14 +75,13 @@ export const sendMessage = async (req, res) => {
       },
     });
 
-    // ✅ Populate and send back to socket
-    const populatedMessage = await newMessage
+    const populatedMessage = await Message.findById(newMessage._id)
       .populate("sender", "name profilePic")
       .populate("replyTo");
 
     const finalMessage = {
       ...populatedMessage.toObject(),
-      tempId: tempId || null, // 🧠 Ensure frontend can match this
+      tempId: tempId || null,
     };
 
     req.app.locals.io.to(conversationId).emit("message-received", finalMessage);
@@ -95,12 +92,12 @@ export const sendMessage = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Send message error:", error.message);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("❌ Send message error:");
+    console.error("Message:", error.message);
+    console.error("Stack:", error.stack);
+    res.status(500).json({ success: false, message: "Server error", error });
   }
 };
-
-
 
 
 
