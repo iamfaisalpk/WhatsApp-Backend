@@ -34,7 +34,7 @@ export const uploadToCloudinary = async (file, folder = "chats") => {
         .then((result) => {
           try {
             if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path); // ✅ Delete only if file exists
+              fs.unlinkSync(file.path); 
             }
           } catch (err) {
             console.warn("⚠️ Could not delete file:", err.message);

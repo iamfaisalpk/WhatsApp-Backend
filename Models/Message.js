@@ -24,10 +24,6 @@ const messageSchema = new mongoose.Schema(
         url: String,
         duration: Number,
     },
-    replyTo: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Message",
-    },
     seenBy: [
     {
         type: mongoose.Schema.Types.ObjectId,
@@ -42,8 +38,17 @@ const messageSchema = new mongoose.Schema(
     deletedForEveryone: {
         type: Boolean,
         default: false,
-    }
+    },
+    replyTo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message",
+        default: null,
+    },
 
+    tempId: {
+        type: String,
+        default: null,
+    },
 },
 { timestamps: true }
 );

@@ -2,17 +2,13 @@ import Message from "../Models/Message.js";
 import Conversation from "../Models/Conversation.js";
 import { uploadToCloudinary } from "../Utils/uploadToCloudinary.js";
 
-
 export const sendMessage = async (req, res) => {
   try {
-    const { conversationId, text, duration } = req.body;
+    const { conversationId, text, duration, replyTo, tempId } = req.body;
     const senderId = req.user.id;
 
     const mediaFile = req.files?.media?.[0];
     const voiceNoteFile = req.files?.voiceNote?.[0];
-
-    console.log("📥 Incoming body:", req.body);
-    console.log("📎 Incoming files:", req.files);
 
     if (!conversationId || (!text && !mediaFile && !voiceNoteFile)) {
       return res.status(400).json({
@@ -24,12 +20,10 @@ export const sendMessage = async (req, res) => {
     let media = null;
     let voiceNote = null;
 
-    // ✅ Handle media file upload
+    // ✅ Media upload
     if (mediaFile) {
-      console.log("🖼️ Uploading media:", mediaFile.originalname, mediaFile.mimetype);
       const uploadResult = await uploadToCloudinary(mediaFile, "whatsapp-clone");
       const fileType = mediaFile.mimetype;
-
       media = {
         url: uploadResult.secure_url,
         type: fileType.startsWith("image")
@@ -42,35 +36,29 @@ export const sendMessage = async (req, res) => {
       };
     }
 
-    // ✅ Handle voice note upload with debug logs
+    // ✅ Voice note upload
     if (voiceNoteFile) {
-      try {
-        console.log("🎤 Uploading voice note:", voiceNoteFile.originalname, voiceNoteFile.mimetype);
-        console.log("🧠 voiceNoteFile buffer length:", voiceNoteFile?.buffer?.length);
-
-        const uploadResult = await uploadToCloudinary(voiceNoteFile, "whatsapp-clone");
-        voiceNote = {
-          url: uploadResult.secure_url,
-          duration: Number(duration) || 0,
-        };
-      } catch (error) {
-        console.error("❌ Voice upload error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
-      }
+      const uploadResult = await uploadToCloudinary(voiceNoteFile, "whatsapp-clone");
+      voiceNote = {
+        url: uploadResult.secure_url,
+        duration: Number(duration) || 0,
+      };
     }
 
-    // ✅ Create message
+    // ✅ Create and save message with tempId
     const newMessage = await Message.create({
       conversationId,
       sender: senderId,
       text: text?.trim() || null,
       media,
       voiceNote,
+      replyTo: replyTo || null,
       seenBy: [senderId],
       status: "sent",
+      tempId: tempId || null, // 💡 Must save tempId to match optimistic message
     });
 
-    // ✅ Update last message in conversation
+    // ✅ Update lastMessage in conversation
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: {
         text:
@@ -89,17 +77,31 @@ export const sendMessage = async (req, res) => {
       },
     });
 
-    // ✅ Emit message via socket
-    const populatedMessage = await newMessage.populate("sender", "name profilePic");
-    req.app.locals.io.to(conversationId).emit("message-received", populatedMessage);
+    // ✅ Populate and send back to socket
+    const populatedMessage = await newMessage
+      .populate("sender", "name profilePic")
+      .populate("replyTo");
 
-    res.status(201).json({ success: true, message: populatedMessage });
+    const finalMessage = {
+      ...populatedMessage.toObject(),
+      tempId: tempId || null, // 🧠 Ensure frontend can match this
+    };
+
+    req.app.locals.io.to(conversationId).emit("message-received", finalMessage);
+
+    return res.status(201).json({
+      success: true,
+      message: finalMessage,
+    });
+
   } catch (error) {
-    console.error("❌ Send message error:", error.message);
-    console.error(error.stack);
+    console.error("Send message error:", error.message);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+
 
 
 export const getMessages = async (req, res) => {
