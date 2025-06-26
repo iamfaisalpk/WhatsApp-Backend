@@ -1,14 +1,20 @@
 import Message from "../Models/Message.js";
 import Conversation from "../Models/Conversation.js";
-import { uploadToCloudinary } from "../Utils/uploadToCloudinary.js"; 
+import { uploadToCloudinary } from "../Utils/uploadToCloudinary.js";
+
 
 export const sendMessage = async (req, res) => {
   try {
     const { conversationId, text, duration } = req.body;
     const senderId = req.user.id;
-    const file = req.file;
 
-    if (!conversationId || (!text && !file)) {
+    const mediaFile = req.files?.media?.[0];
+    const voiceNoteFile = req.files?.voiceNote?.[0];
+
+    console.log("📥 Incoming body:", req.body);
+    console.log("📎 Incoming files:", req.files);
+
+    if (!conversationId || (!text && !mediaFile && !voiceNoteFile)) {
       return res.status(400).json({
         success: false,
         message: "Text, media, or voice note is required",
@@ -18,36 +24,42 @@ export const sendMessage = async (req, res) => {
     let media = null;
     let voiceNote = null;
 
-    // ✅ Uploading to Cloudinary
-    if (file) {
-      const uploadResult = await uploadToCloudinary(file.path, "chats");
+    // ✅ Handle media file upload
+    if (mediaFile) {
+      console.log("🖼️ Uploading media:", mediaFile.originalname, mediaFile.mimetype);
+      const uploadResult = await uploadToCloudinary(mediaFile, "whatsapp-clone");
+      const fileType = mediaFile.mimetype;
 
-      const fileType = file.mimetype;
-
-      if (fileType.startsWith("audio") && duration) {
-        // Voice note
-        voiceNote = {
-          url: uploadResult.secure_url,
-          duration: Number(duration),
-        };
-      } else {
-        // Image, video, or file
-        const type = fileType.startsWith("image")
+      media = {
+        url: uploadResult.secure_url,
+        type: fileType.startsWith("image")
           ? "image"
           : fileType.startsWith("video")
           ? "video"
           : fileType.startsWith("audio")
           ? "audio"
-          : "file";
+          : "file",
+      };
+    }
 
-        media = {
+    // ✅ Handle voice note upload with debug logs
+    if (voiceNoteFile) {
+      try {
+        console.log("🎤 Uploading voice note:", voiceNoteFile.originalname, voiceNoteFile.mimetype);
+        console.log("🧠 voiceNoteFile buffer length:", voiceNoteFile?.buffer?.length);
+
+        const uploadResult = await uploadToCloudinary(voiceNoteFile, "whatsapp-clone");
+        voiceNote = {
           url: uploadResult.secure_url,
-          type,
+          duration: Number(duration) || 0,
         };
+      } catch (error) {
+        console.error("❌ Voice upload error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
       }
     }
 
-    // ✅ Create and save message
+    // ✅ Create message
     const newMessage = await Message.create({
       conversationId,
       sender: senderId,
@@ -55,9 +67,10 @@ export const sendMessage = async (req, res) => {
       media,
       voiceNote,
       seenBy: [senderId],
+      status: "sent",
     });
 
-    // ✅ Update conversation with lastMessage
+    // ✅ Update last message in conversation
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: {
         text:
@@ -76,14 +89,14 @@ export const sendMessage = async (req, res) => {
       },
     });
 
+    // ✅ Emit message via socket
     const populatedMessage = await newMessage.populate("sender", "name profilePic");
-
-    // ✅ Emit to socket
-    req.app.locals.io.to(conversationId).emit("newMessage", populatedMessage);
+    req.app.locals.io.to(conversationId).emit("message-received", populatedMessage);
 
     res.status(201).json({ success: true, message: populatedMessage });
   } catch (error) {
-    console.error("Send message error:", error);
+    console.error("❌ Send message error:", error.message);
+    console.error(error.stack);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -115,10 +128,10 @@ export const markAsSeen = async (req, res) => {
     );
 
     res.status(200).json({ success: true, message: "Messages marked as seen" });
-} catch (error) {
+  } catch (error) {
     console.error("Mark as seen error:", error);
     res.status(500).json({ success: false, message: "Server error" });
-}
+  }
 };
 
 export const deleteChat = async (req, res) => {
@@ -131,7 +144,9 @@ export const deleteChat = async (req, res) => {
     await Message.deleteMany({ conversationId: chatId });
     await chat.deleteOne();
 
-    res.status(200).json({ success: true, message: "Chat and messages deleted" });
+    res
+      .status(200)
+      .json({ success: true, message: "Chat and messages deleted" });
   } catch (error) {
     console.error("Delete Chat Error:", error);
     res.status(500).json({ message: "Failed to delete chat" });
@@ -144,9 +159,50 @@ export const clearChatMessages = async (req, res) => {
 
     await Message.deleteMany({ conversationId });
 
-    res.status(200).json({ success: true, message: "Chat cleared successfully" });
+    req.app.locals.io.to(conversationId).emit("chat-cleared", {
+      conversationId,
+    });
+
+    res
+      .status(200)
+      .json({ success: true, message: "Chat cleared successfully" });
   } catch (error) {
     console.error("Clear Chat Error:", error);
     res.status(500).json({ message: "Failed to clear chat" });
   }
 };
+
+//  Delete one message by ID
+export const deleteMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ success: false, message: "Not authorized to delete this message" });
+    }
+
+    message.text = null;
+    message.media = null;
+    message.voiceNote = null;
+    message.deletedForEveryone = true;
+
+    await message.save();
+
+    req.app.locals.io.to(message.conversationId.toString()).emit("message-deleted", {
+      messageId: message._id,
+    });
+
+    res.status(200).json({ success: true, message: "Message deleted successfully" });
+  } catch (error) {
+    console.error("Delete message error:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+

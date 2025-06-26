@@ -6,7 +6,8 @@ import {
     getMessages,
     markAsSeen,
     deleteChat,
-    clearChatMessages
+    clearChatMessages,
+    deleteMessage
 } from '../Controllers/messageController.js';
 
 const router = express.Router();
@@ -25,5 +26,6 @@ router.put('/seen', authMiddleware, markAsSeen);
 router.get('/:conversationId', authMiddleware, getMessages);
 router.delete('/:chatId', authMiddleware, deleteChat);
 router.delete('/clear/:conversationId', authMiddleware, clearChatMessages);
+router.delete("/delete-message/:messageId", authMiddleware, deleteMessage);
 
 export default router;
