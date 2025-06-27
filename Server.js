@@ -13,6 +13,8 @@ import messageRoutes from "./Routes/messageRoutes.js";
 import communityRoutes from "./Routes/communityRoutes.js";
 import chatRoutes from "./Routes/chatRoutes.js";
 import userRoutes from "./Routes/userRoutes.js";
+import chatMetaRoutes from "./Routes/chatMetaRoutes.js";
+import tokenRoutes from './Routes/tokenRoutes.js'
 import errorHandler from "./Middlewares/errorHandler.js";
 import { setupSocket } from "./Socket.js";
 
@@ -48,7 +50,10 @@ app.use("/api/profile", profileRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/community", communityRoutes);
 app.use("/api/chat",chatRoutes);
-app.use("/api/users",userRoutes)
+app.use("/api/users",userRoutes);
+app.use("/api/chat-meta", chatMetaRoutes);
+app.use("/api/token",tokenRoutes)
+
 
 app.use(errorHandler);
 

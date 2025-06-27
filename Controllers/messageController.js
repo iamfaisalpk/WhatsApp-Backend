@@ -121,17 +121,29 @@ export const markAsSeen = async (req, res) => {
     const { conversationId } = req.body;
     const userId = req.user.id;
 
+    if (!conversationId) {
+      return res.status(400).json({ success: false, message: "Conversation ID is required" });
+    }
+
+    // Update messages that have not been seen by this user
     await Message.updateMany(
       { conversationId, seenBy: { $ne: userId } },
       { $addToSet: { seenBy: userId } }
     );
 
+    // Emit realtime seen-update to other users in the conversation
+    req.app.locals.io.to(conversationId).emit("seen-update", {
+      conversationId,
+      seenBy: userId,
+    });
+
     res.status(200).json({ success: true, message: "Messages marked as seen" });
   } catch (error) {
-    console.error("Mark as seen error:", error);
+    console.error("❌ Mark as seen error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 export const deleteChat = async (req, res) => {
   const { chatId } = req.params;

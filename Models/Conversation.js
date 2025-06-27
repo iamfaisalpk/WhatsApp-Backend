@@ -13,12 +13,19 @@ const conversationSchema = new mongoose.Schema({
     groupAdmin: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
     lastMessage: {
-        text: { type: String, default: "" },
-        media: { type: String, default: "" },
-        sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        timestamp: { type: Date, default: null },
-    },
+    text: { type: String, default: "" },
+    media: { type: String, default: "" },
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    timestamp: { type: Date, default: null },
+},
+
+    //  NEW: users who marked chat as favorite
+    isFavorite: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
+    //  NEW: users who haven't seen the latest message
+    unreadBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
 const Conversation = mongoose.models.Conversation || mongoose.model("Conversation", conversationSchema);
+
 export default Conversation;

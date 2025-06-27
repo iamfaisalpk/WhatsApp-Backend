@@ -35,9 +35,17 @@ export function setupSocket(server, app) {
       }
     });
 
-    // ✅ Updated new-message handler with tempId support
+    // ✅ Handle new messages
     socket.on("new-message", async (messageData) => {
-      const { conversationId, senderId, text, media, tempId, voiceNote, replyTo } = messageData;
+      const {
+        conversationId,
+        senderId,
+        text,
+        media,
+        tempId,
+        voiceNote,
+        replyTo,
+      } = messageData;
 
       try {
         const newMessage = await Message.create({
@@ -53,15 +61,18 @@ export function setupSocket(server, app) {
 
         await Conversation.findByIdAndUpdate(conversationId, {
           lastMessage: {
-            text: populatedMsg.text || populatedMsg.voiceNote?.url
-              ? "🎤 Voice"
-              : "📎 Media",
+            text:
+              populatedMsg.text ||
+              (populatedMsg.voiceNote?.url
+                ? "🎤 Voice"
+                : populatedMsg.media
+                ? "📎 Media"
+                : ""),
             sender: populatedMsg.sender,
             timestamp: populatedMsg.createdAt,
           },
         });
 
-        // ✅ Emit tempId with the message to match optimistic message
         io.to(conversationId).emit("message-received", {
           ...populatedMsg.toObject(),
           tempId,
@@ -82,16 +93,17 @@ export function setupSocket(server, app) {
       socket.to(conversationId).emit("stop-typing", userId);
     });
 
-    // ✅ Seen update
+    // ✅ Seen updates with socket broadcast
     socket.on("message-seen", ({ conversationId, userId }) => {
+      // Notify other users in the chat
       socket.to(conversationId).emit("seen-update", {
         conversationId,
         seenBy: userId,
       });
-      console.log(`👁️ Seen update from ${userId} in ${conversationId}`);
+      console.log(`👁️ Seen update broadcast from user ${userId} in ${conversationId}`);
     });
 
-    // ✅ Delete message
+    // ✅ Message delete
     socket.on("delete-message", async ({ messageId, conversationId }) => {
       try {
         const message = await Message.findById(messageId);
@@ -104,13 +116,13 @@ export function setupSocket(server, app) {
         await message.save();
 
         io.to(conversationId).emit("message-deleted", { messageId });
-        console.log(`🗑️ Message ${messageId} deleted in ${conversationId}`);
+        console.log(` Message ${messageId} deleted in ${conversationId}`);
       } catch (err) {
-        console.error("❌ delete-message error:", err.message);
+        console.error(" delete-message error:", err.message);
       }
     });
 
-    // ✅ Disconnect
+    //  Handle disconnection
     socket.on("disconnect", async () => {
       console.log(`🔌 Socket disconnected: ${socket.id}`);
 
@@ -123,14 +135,14 @@ export function setupSocket(server, app) {
             isOnline: false,
             lastSeen: new Date(),
           });
-          console.log(`⚪ User ${userId} marked offline`);
+          console.log(` User ${userId} marked offline`);
         } catch (err) {
-          console.error("❌ disconnect error:", err.message);
+          console.error(" disconnect error:", err.message);
         }
       }
     });
   });
 
-  // Make io globally accessible (optional)
+  // Expose io globally (optional)
   app.locals.io = io;
 }

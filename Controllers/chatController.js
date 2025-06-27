@@ -1,53 +1,81 @@
 import Conversation from "../Models/Conversation.js";
+import ChatMeta from "../Models/ChatMeta.js";
 
 
 export const accessChat = async (req, res) => {
-    const { userId } = req.body;
+  const { userId } = req.body;
 
-    if (!userId) {
-        return res.status(400).json({ success: false, message: "User ID is required" });
+  if (!userId) {
+    return res.status(400).json({ success: false, message: "User ID is required" });
+  }
+
+  try {
+    let chat = await Conversation.findOne({
+      isGroup: false,
+      members: { $all: [req.user.id, userId], $size: 2 }
+    }).populate("members", "name profilePic isOnline lastSeen");
+
+    if (chat) {
+        //  Ensure ChatMeta exists
+      await ChatMeta.findOneAndUpdate(
+        { user: req.user.id, chat: chat._id },
+        { $setOnInsert: { isRead: true } },
+        { upsert: true, new: true }
+      );
+
+      return res.status(200).json({ success: true, chat });
     }
 
-    try {
-        let chat = await Conversation.findOne({
-            isGroup: false,
-            members: { $all: [req.user.id, userId], $size: 2 }
-        }).populate("members", "name profilePic isOnline lastSeen");
+    // Chat not found, create new
+    const newChat = await Conversation.create({
+      isGroup: false,
+      members: [req.user.id, userId],
+    });
 
-        if (chat) {
-            return res.status(200).json({ success: true, chat });
-        }
+    const fullChat = await Conversation.findById(newChat._id)
+      .populate("members", "name profilePic isOnline lastSeen");
 
-        const newChat = await Conversation.create({
-            isGroup: false,
-            members: [req.user.id, userId],
-        });
+    //  Create ChatMeta for new chat
+    await ChatMeta.findOneAndUpdate(
+      { user: req.user.id, chat: newChat._id },
+      { $setOnInsert: { isRead: true } },
+      { upsert: true, new: true }
+    );
 
-        const fullChat = await Conversation.findById(newChat._id)
-            .populate("members", "name profilePic isOnline lastSeen");
+    return res.status(201).json({ success: true, chat: fullChat });
 
-        return res.status(201).json({ success: true, chat: fullChat });
-
-    } catch (error) {
-        console.error("Access Chat Error:", error);
-        return res.status(500).json({ success: false, message: "Something went wrong" });
-    }
+  } catch (error) {
+    console.error("Access Chat Error:", error);
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
 };
 
-export const fetchChats = async (req, res) => {
-    try {
-        const chats = await Conversation.find({
-            members: req.user.id
-        })
-            .populate("members", "name profilePic isOnline lastSeen")
-            .populate("groupAdmin", "-otp -__v")
-            .sort({ updatedAt: -1 });
 
-        return res.status(200).json({ success: true, chats });
-    } catch (error) {
-        console.error("Fetch Chats Error:", error);
-        return res.status(500).json({ success: false, message: "Unable to fetch chats" });
-    }
+export const fetchChats = async (req, res) => {
+  try {
+    const chats = await Conversation.find({
+      members: req.user.id
+    })
+      .populate("members", "name profilePic isOnline lastSeen")
+      .populate("groupAdmin", "-otp -__v")
+      .sort({ updatedAt: -1 });
+
+    const chatsWithMeta = await Promise.all(
+      chats.map(async (chat) => {
+        const meta = await ChatMeta.findOne({ user: req.user.id, chat: chat._id });
+        return {
+          ...chat.toObject(),
+          isFavorite: meta?.isFavorite || false,
+          isRead: meta?.isRead !== false,
+        };
+      })
+    );
+
+    return res.status(200).json({ success: true, chats: chatsWithMeta });
+  } catch (error) {
+    console.error("Fetch Chats Error:", error);
+    return res.status(500).json({ success: false, message: "Unable to fetch chats" });
+  }
 };
 
 export const createGroupChat = async (req, res) => {
