@@ -8,6 +8,8 @@ const authMiddleware = async (req, res, next) => {
     
     const authHeader = req.headers.authorization;
     console.log(' Auth header:', authHeader ? 'Present' : 'Missing');
+    console.log("📥 Incoming Authorization Header:", req.headers.authorization);
+
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.log('Invalid auth header format');

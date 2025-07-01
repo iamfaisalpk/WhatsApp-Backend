@@ -27,66 +27,47 @@ export const getMyProfile = async (req, res) => {
   }
 };
 
-// Update User Profile
 export const updateMyProfile = async (req, res) => {
   try {
-    console.log("Profile update request for user:", req.user.id);
-    
-    // 1. First verify the user exists
+    console.log("📥 Profile update request for user:", req.user.id);
+
     const user = await User.findById(req.user.id);
     if (!user) {
-      console.error("User not found:", req.user.id);
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // 2. Validate input
-    const { name } = req.body;
-    const profilePic = req.file?.path;
-    
-    if (!name && !profilePic) {
-      return res.status(400).json({
-        success: false,
-        message: "Nothing to update",
-      });
+    const { name, about } = req.body;
+    let profilePic;
+
+    // 👇 Find file if it exists
+    if (req.files && req.files.length > 0) {
+      const picFile = req.files.find((file) => file.fieldname === "profilePic");
+      if (picFile) {
+        profilePic = picFile.path;
+      }
     }
 
-    // 3. Prepare updates
+    if (!name && !about && !profilePic) {
+      return res.status(400).json({ success: false, message: "Nothing to update" });
+    }
+
     const updates = {};
     if (name) updates.name = name.trim();
+    if (about) updates.about = about.trim();
     if (profilePic) updates.profilePic = profilePic;
 
-    // 4. Update user
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user.id,
-      updates,
-      { new: true, runValidators: true }
-    ).select("-__v -otp");
-
-    if (!updatedUser) {
-      throw new Error("User update failed");
-    }
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updates, {
+      new: true,
+      runValidators: true,
+    }).select("-__v -otp");
 
     res.status(200).json({
       success: true,
-      message: "Profile updated",
+      message: "Profile updated successfully",
       user: updatedUser,
     });
-
   } catch (error) {
-    console.error("Profile update error:", error);
-    
-    // Handle specific errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        error: error.message,
-      });
-    }
-    
+    console.error(" Profile update error:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",

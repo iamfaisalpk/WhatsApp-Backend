@@ -1,4 +1,5 @@
 import { Server as SocketIOServer } from "socket.io";
+import jwt from "jsonwebtoken"; 
 import User from "./Models/User.js";
 import Message from "./Models/Message.js";
 import Conversation from "./Models/Conversation.js";
@@ -6,7 +7,7 @@ import Conversation from "./Models/Conversation.js";
 export function setupSocket(server, app) {
   const io = new SocketIOServer(server, {
     cors: {
-      origin: "http://localhost:5173",
+      origin: "http://localhost:5173", 
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -14,43 +15,46 @@ export function setupSocket(server, app) {
 
   const onlineUsers = new Map();
 
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error("❌ No token provided"));
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.userId = decoded.id; 
+      return next();
+    } catch (err) {
+      console.error("❌ Socket JWT error:", err.message);
+      return next(new Error("Unauthorized"));
+    }
+  });
+
+  // ✅ ON CONNECT
   io.on("connection", (socket) => {
-    console.log(`🟢 Socket connected: ${socket.id}`);
+    const userId = socket.userId;
+    console.log(`🟢 Socket connected: ${socket.id} (User: ${userId})`);
+    onlineUsers.set(userId, socket.id);
 
-    socket.on("user-online", async (userId) => {
-      if (!userId) return;
-      onlineUsers.set(userId, socket.id);
-      try {
-        await User.findByIdAndUpdate(userId, { isOnline: true });
-        console.log(`✅ User ${userId} marked online`);
-      } catch (error) {
-        console.error("❌ user-online error:", error.message);
-      }
-    });
+    // ✅ Mark user online
+    User.findByIdAndUpdate(userId, { isOnline: true }).catch((err) =>
+      console.error("⚠️ user-online error:", err.message)
+    );
 
+    // ✅ Join chat room
     socket.on("join-chat", (conversationId) => {
       if (conversationId) {
         socket.join(conversationId);
-        console.log(`➕ Socket ${socket.id} joined: ${conversationId}`);
+        console.log(`➕ User ${userId} joined: ${conversationId}`);
       }
     });
 
-    // ✅ Handle new messages
-    socket.on("new-message", async (messageData) => {
-      const {
-        conversationId,
-        senderId,
-        text,
-        media,
-        tempId,
-        voiceNote,
-        replyTo,
-      } = messageData;
-
+    // ✅ Send message
+    socket.on("new-message", async (data) => {
+      const { conversationId, text, media, voiceNote, replyTo, tempId } = data;
       try {
         const newMessage = await Message.create({
           conversationId,
-          sender: senderId,
+          sender: userId,
           text,
           media,
           voiceNote,
@@ -79,31 +83,29 @@ export function setupSocket(server, app) {
         });
 
         console.log(`📨 New message in ${conversationId}`);
-      } catch (error) {
-        console.error("❌ new-message error:", error.message);
+      } catch (err) {
+        console.error("❌ Message error:", err.message);
       }
     });
 
-    // ✅ Typing indicators
-    socket.on("typing", ({ conversationId, userId }) => {
+    // ✅ Typing indicator
+    socket.on("typing", ({ conversationId }) => {
       socket.to(conversationId).emit("typing", userId);
     });
 
-    socket.on("stop-typing", ({ conversationId, userId }) => {
+    socket.on("stop-typing", ({ conversationId }) => {
       socket.to(conversationId).emit("stop-typing", userId);
     });
 
-    // ✅ Seen updates with socket broadcast
-    socket.on("message-seen", ({ conversationId, userId }) => {
-      // Notify other users in the chat
+    // ✅ Seen
+    socket.on("message-seen", ({ conversationId }) => {
       socket.to(conversationId).emit("seen-update", {
         conversationId,
         seenBy: userId,
       });
-      console.log(`👁️ Seen update broadcast from user ${userId} in ${conversationId}`);
     });
 
-    // ✅ Message delete
+    // ✅ Delete
     socket.on("delete-message", async ({ messageId, conversationId }) => {
       try {
         const message = await Message.findById(messageId);
@@ -116,33 +118,27 @@ export function setupSocket(server, app) {
         await message.save();
 
         io.to(conversationId).emit("message-deleted", { messageId });
-        console.log(` Message ${messageId} deleted in ${conversationId}`);
       } catch (err) {
-        console.error(" delete-message error:", err.message);
+        console.error("delete-message error:", err.message);
       }
     });
 
-    //  Handle disconnection
+    // ✅ Disconnect
     socket.on("disconnect", async () => {
       console.log(`🔌 Socket disconnected: ${socket.id}`);
-
-      const userId = [...onlineUsers.entries()].find(([, sid]) => sid === socket.id)?.[0];
-
-      if (userId) {
-        onlineUsers.delete(userId);
-        try {
-          await User.findByIdAndUpdate(userId, {
-            isOnline: false,
-            lastSeen: new Date(),
-          });
-          console.log(` User ${userId} marked offline`);
-        } catch (err) {
-          console.error(" disconnect error:", err.message);
-        }
+      onlineUsers.delete(userId);
+      try {
+        await User.findByIdAndUpdate(userId, {
+          isOnline: false,
+          lastSeen: new Date(),
+        });
+        console.log(`⚪️ User ${userId} marked offline`);
+      } catch (err) {
+        console.error("disconnect error:", err.message);
       }
     });
   });
 
-  // Expose io globally (optional)
+  // Optionally expose socket instance
   app.locals.io = io;
 }
