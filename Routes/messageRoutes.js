@@ -7,8 +7,11 @@ import {
     markAsSeen,
     deleteChat,
     clearChatMessages,
-    deleteMessage
+    deleteMessage,
+    deleteMessageForMe,
+    reactToMessage
 } from '../Controllers/messageController.js';
+
 
 const router = express.Router();
 
@@ -27,5 +30,8 @@ router.get('/:conversationId', authMiddleware, getMessages);
 router.delete('/:chatId', authMiddleware, deleteChat);
 router.delete('/clear/:conversationId', authMiddleware, clearChatMessages);
 router.delete("/delete-message/:messageId", authMiddleware, deleteMessage);
+router.post("/delete-for-me/:messageId", authMiddleware, deleteMessageForMe);
+router.post("/react/:messageId", authMiddleware, reactToMessage);
+
 
 export default router;

@@ -80,7 +80,7 @@ export const sendOtp = async (req, res) => {
   }
 };
 
-// VERIFY OTP & LOGIN / REGISTER
+// VERIFY OTP 
 export const verifyOtp = async (req, res) => {
   try {
     const { phone, otp, sessionId } = req.body;
@@ -170,7 +170,7 @@ export const verifyOtp = async (req, res) => {
       accessToken,
       refreshToken: cleanRefreshToken,
       user: {
-        id: user._id,
+        _id: user._id,
         phone: user.phone,
         name: user.name,
         profilePic: user.profilePic,

@@ -2,22 +2,25 @@ import Message from "../Models/Message.js";
 import Conversation from "../Models/Conversation.js";
 import { uploadToCloudinary } from "../Utils/uploadToCloudinary.js";
 
-
 export const sendMessage = async (req, res) => {
   try {
     console.log("📥 Incoming request body:", req.body);
     console.log("📎 Incoming files:", req.files);
 
-    const { conversationId, text, duration, replyTo, tempId } = req.body;
+    const { conversationId, text, duration, replyTo, forwardFrom, tempId } =
+      req.body;
     const senderId = req.user.id;
 
     const mediaFile = req.files?.media?.[0];
     const voiceNoteFile = req.files?.voiceNote?.[0];
 
-    if (!conversationId || (!text && !mediaFile && !voiceNoteFile)) {
+    if (
+      !conversationId ||
+      (!text && !mediaFile && !voiceNoteFile && !forwardFrom)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Text, media, or voice note is required",
+        message: "Text, media, voice note, or forwarded message is required",
       });
     }
 
@@ -27,7 +30,7 @@ export const sendMessage = async (req, res) => {
     if (mediaFile) {
       const fileType = mediaFile.mimetype;
       media = {
-        url: mediaFile.path, 
+        url: mediaFile.path,
         type: fileType.startsWith("image")
           ? "image"
           : fileType.startsWith("video")
@@ -40,7 +43,7 @@ export const sendMessage = async (req, res) => {
 
     if (voiceNoteFile) {
       voiceNote = {
-        url: voiceNoteFile.path, 
+        url: voiceNoteFile.path,
         duration: Number(duration) || 0,
       };
     }
@@ -52,6 +55,7 @@ export const sendMessage = async (req, res) => {
       media,
       voiceNote,
       replyTo: replyTo || null,
+      forwardFrom: forwardFrom ? JSON.parse(forwardFrom) : null,
       seenBy: [senderId],
       status: "sent",
       tempId: tempId || null,
@@ -69,6 +73,8 @@ export const sendMessage = async (req, res) => {
             ? "📎 File"
             : voiceNote
             ? "🎤 Voice Note"
+            : forwardFrom
+            ? "📩 Forwarded message"
             : "📎 Media"),
         sender: senderId,
         timestamp: newMessage.createdAt,
@@ -90,7 +96,6 @@ export const sendMessage = async (req, res) => {
       success: true,
       message: finalMessage,
     });
-
   } catch (error) {
     console.error("❌ Send message error:");
     console.error("Message:", error.message);
@@ -99,17 +104,20 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-
-
 export const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
+    const userId = req.user.id;
 
-    const messages = await Message.find({ conversationId })
+    const messages = await Message.find({
+      conversationId,
+      deletedFor: { $ne: userId },
+    })
       .populate("sender", "name profilePic")
+      .populate("replyTo")
       .sort({ createdAt: 1 });
 
-    res.status(200).json(messages);
+    res.status(200).json({ messages });
   } catch (error) {
     console.error("Get messages error:", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -122,12 +130,18 @@ export const markAsSeen = async (req, res) => {
     const userId = req.user.id;
 
     if (!conversationId) {
-      return res.status(400).json({ success: false, message: "Conversation ID is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Conversation ID is required" });
     }
 
-    // Update messages that have not been seen by this user
     await Message.updateMany(
-      { conversationId, seenBy: { $ne: userId } },
+      {
+        conversationId,
+        sender: { $ne: userId },
+        seenBy: { $ne: userId },
+        deletedFor: { $ne: userId },
+      },
       { $addToSet: { seenBy: userId } }
     );
 
@@ -143,7 +157,6 @@ export const markAsSeen = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
 
 export const deleteChat = async (req, res) => {
   const { chatId } = req.params;
@@ -167,36 +180,47 @@ export const deleteChat = async (req, res) => {
 export const clearChatMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
+    const userId = req.user.id;
 
-    await Message.deleteMany({ conversationId });
+    const messages = await Message.find({ conversationId });
+
+    const updatePromises = messages.map((msg) => {
+      if (!msg.deletedFor?.includes(userId)) {
+        msg.deletedFor = [...(msg.deletedFor || []), userId];
+        return msg.save();
+      }
+    });
+
+    await Promise.all(updatePromises);
 
     req.app.locals.io.to(conversationId).emit("chat-cleared", {
       conversationId,
+      userId,
     });
 
-    res
-      .status(200)
-      .json({ success: true, message: "Chat cleared successfully" });
+    res.status(200).json({ success: true, message: "Chat cleared for you" });
   } catch (error) {
     console.error("Clear Chat Error:", error);
     res.status(500).json({ message: "Failed to clear chat" });
   }
 };
 
-//  Delete one message by ID
 export const deleteMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
     const userId = req.user.id;
 
     const message = await Message.findById(messageId);
-
     if (!message) {
-      return res.status(404).json({ success: false, message: "Message not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Message not found" });
     }
 
     if (message.sender.toString() !== userId) {
-      return res.status(403).json({ success: false, message: "Not authorized to delete this message" });
+      return res
+        .status(403)
+        .json({ success: false, message: "Not authorized" });
     }
 
     message.text = null;
@@ -206,14 +230,95 @@ export const deleteMessage = async (req, res) => {
 
     await message.save();
 
-    req.app.locals.io.to(message.conversationId.toString()).emit("message-deleted", {
-      messageId: message._id,
-    });
+    req.app.locals.io
+      .to(message.conversationId.toString())
+      .emit("message-deleted", {
+        messageId: message._id,
+        deletedForEveryone: true,
+      });
 
-    res.status(200).json({ success: true, message: "Message deleted successfully" });
+    res
+      .status(200)
+      .json({ success: true, message: "Message deleted for everyone" });
   } catch (error) {
     console.error("Delete message error:", error.message);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
+export const deleteMessageForMe = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Message not found" });
+    }
+
+    if (!message.deletedFor?.includes(userId)) {
+      message.deletedFor = [...(message.deletedFor || []), userId];
+      await message.save();
+    }
+
+    res.status(200).json({ success: true, message: "Message deleted for you" });
+  } catch (error) {
+    console.error("Delete for me error:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ➕ React to a message
+export const reactToMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { emoji } = req.body;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: "Message not found" });
+
+    // Check if user already reacted
+    const existingReactionIndex = message.reactions.findIndex(
+      (r) => r.user.toString() === userId
+    );
+
+    if (existingReactionIndex !== -1) {
+      // If emoji is same, remove it (toggle off), otherwise update
+      if (message.reactions[existingReactionIndex].emoji === emoji) {
+        message.reactions.splice(existingReactionIndex, 1);
+      } else {
+        message.reactions[existingReactionIndex].emoji = emoji;
+      }
+    } else {
+      message.reactions.push({ emoji, user: userId });
+    }
+
+    await message.save();
+
+    const updatedMessage = await Message.findById(messageId)
+      .populate("sender", "name profilePic")
+      .populate("reactions.user", "name profilePic");
+
+    // Emit via socket
+    req.app.locals.io
+      .to(message.conversationId.toString())
+      .emit("message-reacted", {
+        messageId: updatedMessage._id,
+        reactions: updatedMessage.reactions,
+      });
+
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Reaction updated",
+        reactions: updatedMessage.reactions,
+      });
+  } catch (error) {
+    console.error("React error:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

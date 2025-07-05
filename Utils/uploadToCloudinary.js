@@ -4,7 +4,6 @@ import streamifier from "streamifier";
 
 export const uploadToCloudinary = async (file, folder = "chats") => {
   return new Promise((resolve, reject) => {
-    // 🧠 Upload using memory buffer (Multer memoryStorage)
     if (file?.buffer) {
       const stream = cloudinary.uploader.upload_stream(
         {
