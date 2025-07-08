@@ -29,11 +29,11 @@ export const sendMessage = async (req, res) => {
     let voiceNote = null;
 
     if (mediaFile) {
-      const uploaded = mediaFile; 
+      const uploaded = mediaFile;
       const fileType = uploaded.mimetype;
 
       media = {
-        url: uploaded.path, 
+        url: uploaded.path,
         type: fileType.startsWith("image")
           ? "image"
           : fileType.startsWith("video")
@@ -46,10 +46,10 @@ export const sendMessage = async (req, res) => {
     }
 
     if (voiceNoteFile) {
-      const uploaded = voiceNoteFile; 
+      const uploaded = voiceNoteFile;
       voiceNote = {
         url: uploaded.path,
-        duration: Math.max(0, Math.floor(Number(duration) || 0))
+        duration: Math.max(0, Math.floor(Number(duration) || 0)),
       };
     }
 
@@ -84,6 +84,7 @@ export const sendMessage = async (req, res) => {
         sender: senderId,
         timestamp: newMessage.createdAt,
       },
+      updatedAt: new Date(), 
     });
 
     const populatedMessage = await Message.findById(newMessage._id)

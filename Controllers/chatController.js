@@ -11,23 +11,32 @@ export const accessChat = async (req, res) => {
   }
 
   try {
+    // 1. Check if chat already exists
     let chat = await Conversation.findOne({
       isGroup: false,
       members: { $all: [req.user.id, userId], $size: 2 },
     }).populate("members", "name profilePic isOnline lastSeen");
 
+    // 2. If found, ensure ChatMeta exists for both
     if (chat) {
-      //  Ensure ChatMeta exists
-      await ChatMeta.findOneAndUpdate(
-        { user: req.user.id, chat: chat._id },
-        { $setOnInsert: { isRead: true } },
-        { upsert: true, new: true }
+      const userIds = [req.user.id, userId];
+
+      const metaResults = await Promise.all(
+        userIds.map((id) =>
+          ChatMeta.findOneAndUpdate(
+            { user: id, chat: chat._id },
+            { $setOnInsert: { isRead: true } },
+            { upsert: true, new: true }
+          )
+        )
       );
+
+      console.log("✅ Existing chat. Meta ensured:", metaResults);
 
       return res.status(200).json({ success: true, chat });
     }
 
-    // Chat not found, create new
+    // 3. Create new chat
     const newChat = await Conversation.create({
       isGroup: false,
       members: [req.user.id, userId],
@@ -38,12 +47,20 @@ export const accessChat = async (req, res) => {
       "name profilePic isOnline lastSeen"
     );
 
-    //  Create ChatMeta for new chat
-    await ChatMeta.findOneAndUpdate(
-      { user: req.user.id, chat: newChat._id },
-      { $setOnInsert: { isRead: true } },
-      { upsert: true, new: true }
+    // 4. Create ChatMeta for both users
+    const userIds = [req.user.id, userId];
+
+    const metaResults = await Promise.all(
+      userIds.map((id) =>
+        ChatMeta.findOneAndUpdate(
+          { user: id, chat: newChat._id },
+          { $setOnInsert: { isRead: true } },
+          { upsert: true, new: true }
+        )
+      )
     );
+
+    console.log("🆕 New chat created. Meta entries created:", metaResults);
 
     return res.status(201).json({ success: true, chat: fullChat });
   } catch (error) {
@@ -53,6 +70,7 @@ export const accessChat = async (req, res) => {
       .json({ success: false, message: "Something went wrong" });
   }
 };
+
 
 export const fetchChats = async (req, res) => {
   try {
@@ -72,14 +90,23 @@ export const fetchChats = async (req, res) => {
 
     const chatsWithMeta = await Promise.all(
       chats.map(async (chat) => {
-        const meta = await ChatMeta.findOne({
+        let meta = await ChatMeta.findOne({
           user: req.user.id,
           chat: chat._id,
         });
+
+        if (!meta) {
+          meta = await ChatMeta.create({
+            user: req.user.id,
+            chat: chat._id,
+            isRead: true,
+          });
+        }
+
         return {
           ...chat.toObject(),
-          isFavorite: meta?.isFavorite || false,
-          isRead: meta?.isRead !== false,
+          isFavorite: meta.isFavorite || false,
+          isRead: meta.isRead !== false,
         };
       })
     );
