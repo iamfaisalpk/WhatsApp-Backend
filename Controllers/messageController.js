@@ -1,6 +1,5 @@
 import Message from "../Models/Message.js";
 import Conversation from "../Models/Conversation.js";
-import { uploadToCloudinary } from "../Utils/uploadToCloudinary.js";
 
 export const sendMessage = async (req, res) => {
   try {
@@ -9,6 +8,8 @@ export const sendMessage = async (req, res) => {
 
     const { conversationId, text, duration, replyTo, forwardFrom, tempId } =
       req.body;
+    console.log("incoming reqbody", req.body);
+    console.log("incoming files", req.files);
     const senderId = req.user.id;
 
     const mediaFile = req.files?.media?.[0];
@@ -28,9 +29,11 @@ export const sendMessage = async (req, res) => {
     let voiceNote = null;
 
     if (mediaFile) {
-      const fileType = mediaFile.mimetype;
+      const uploaded = mediaFile; 
+      const fileType = uploaded.mimetype;
+
       media = {
-        url: mediaFile.path,
+        url: uploaded.path, 
         type: fileType.startsWith("image")
           ? "image"
           : fileType.startsWith("video")
@@ -38,13 +41,15 @@ export const sendMessage = async (req, res) => {
           : fileType.startsWith("audio")
           ? "audio"
           : "file",
+        originalName: uploaded.originalname,
       };
     }
 
     if (voiceNoteFile) {
+      const uploaded = voiceNoteFile; 
       voiceNote = {
-        url: voiceNoteFile.path,
-        duration: Number(duration) || 0,
+        url: uploaded.path,
+        duration: Math.max(0, Math.floor(Number(duration) || 0))
       };
     }
 
@@ -83,7 +88,8 @@ export const sendMessage = async (req, res) => {
 
     const populatedMessage = await Message.findById(newMessage._id)
       .populate("sender", "name profilePic")
-      .populate("replyTo");
+      .populate("replyTo")
+      .populate("reactions.user", "name profilePic");
 
     const finalMessage = {
       ...populatedMessage.toObject(),
@@ -97,7 +103,7 @@ export const sendMessage = async (req, res) => {
       message: finalMessage,
     });
   } catch (error) {
-    console.error("❌ Send message error:");
+    console.error(" Send message error:");
     console.error("Message:", error.message);
     console.error("Stack:", error.stack);
     res.status(500).json({ success: false, message: "Server error", error });
@@ -153,7 +159,7 @@ export const markAsSeen = async (req, res) => {
 
     res.status(200).json({ success: true, message: "Messages marked as seen" });
   } catch (error) {
-    console.error("❌ Mark as seen error:", error);
+    console.error(" Mark as seen error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -310,13 +316,11 @@ export const reactToMessage = async (req, res) => {
         reactions: updatedMessage.reactions,
       });
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Reaction updated",
-        reactions: updatedMessage.reactions,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Reaction updated",
+      reactions: updatedMessage.reactions,
+    });
   } catch (error) {
     console.error("React error:", error.message);
     res.status(500).json({ success: false, message: "Server error" });
