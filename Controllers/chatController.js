@@ -1,6 +1,9 @@
 import Conversation from "../Models/Conversation.js";
 import ChatMeta from "../Models/ChatMeta.js";
+import User from "../Models/User.js";
+import Message from "../Models/Message.js";
 
+//  Access One-to-One Chat
 export const accessChat = async (req, res) => {
   const { userId } = req.body;
 
@@ -11,13 +14,18 @@ export const accessChat = async (req, res) => {
   }
 
   try {
-    // 1. Check if chat already exists
+    //  Block Check
+    const targetUser = await User.findById(userId);
+    if (targetUser.blockedUsers.includes(req.user.id)) {
+      return res.status(403).json({ message: "You are blocked by this user." });
+    }
+
+    //  Check if chat exists
     let chat = await Conversation.findOne({
       isGroup: false,
       members: { $all: [req.user.id, userId], $size: 2 },
     }).populate("members", "name profilePic isOnline lastSeen");
 
-    // 2. If found, ensure ChatMeta exists for both
     if (chat) {
       const userIds = [req.user.id, userId];
 
@@ -31,12 +39,10 @@ export const accessChat = async (req, res) => {
         )
       );
 
-      console.log("✅ Existing chat. Meta ensured:", metaResults);
-
       return res.status(200).json({ success: true, chat });
     }
 
-    // 3. Create new chat
+    //  Create New Chat
     const newChat = await Conversation.create({
       isGroup: false,
       members: [req.user.id, userId],
@@ -47,7 +53,6 @@ export const accessChat = async (req, res) => {
       "name profilePic isOnline lastSeen"
     );
 
-    // 4. Create ChatMeta for both users
     const userIds = [req.user.id, userId];
 
     const metaResults = await Promise.all(
@@ -60,8 +65,6 @@ export const accessChat = async (req, res) => {
       )
     );
 
-    console.log("🆕 New chat created. Meta entries created:", metaResults);
-
     return res.status(201).json({ success: true, chat: fullChat });
   } catch (error) {
     console.error("Access Chat Error:", error);
@@ -71,7 +74,7 @@ export const accessChat = async (req, res) => {
   }
 };
 
-
+//  Get User Chats
 export const fetchChats = async (req, res) => {
   try {
     const chats = await Conversation.find({
@@ -120,14 +123,13 @@ export const fetchChats = async (req, res) => {
   }
 };
 
+//  Group Chat Creation
 export const createGroupChat = async (req, res) => {
   const { members, groupName } = req.body;
   const groupAvatar = req.file?.path || "";
 
   if (!members || !groupName) {
-    return res
-      .status(400)
-      .json({ message: "Members and group name are required" });
+    return res.status(400).json({ message: "Members and group name are required" });
   }
 
   const allUsers = [...members, req.user.id];
@@ -213,7 +215,6 @@ export const deleteChat = async (req, res) => {
     if (!chat) return res.status(404).json({ message: "Chat not found" });
 
     await chat.deleteOne();
-
     res.status(200).json({ success: true, message: "Chat deleted" });
   } catch (error) {
     console.error("Delete Chat Error:", error);

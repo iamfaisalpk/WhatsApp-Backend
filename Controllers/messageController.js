@@ -3,8 +3,8 @@ import Conversation from "../Models/Conversation.js";
 
 export const sendMessage = async (req, res) => {
   try {
-    console.log("📥 Incoming request body:", req.body);
-    console.log("📎 Incoming files:", req.files);
+    console.log(" Incoming request body:", req.body);
+    console.log(" Incoming files:", req.files);
 
     const { conversationId, text, duration, replyTo, forwardFrom, tempId } =
       req.body;
@@ -22,6 +22,22 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Text, media, voice note, or forwarded message is required",
+      });
+    }
+
+    //  Block Check (WhatsApp behavior)
+    const conversation = await Conversation.findById(conversationId).populate(
+      "members"
+    );
+
+    const receiver = conversation.members.find(
+      (member) => member._id.toString() !== senderId
+    );
+
+    if (receiver?.blockedUsers?.includes(senderId)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are blocked by this user and cannot send messages.",
       });
     }
 
@@ -84,7 +100,7 @@ export const sendMessage = async (req, res) => {
         sender: senderId,
         timestamp: newMessage.createdAt,
       },
-      updatedAt: new Date(), 
+      updatedAt: new Date(),
     });
 
     const populatedMessage = await Message.findById(newMessage._id)

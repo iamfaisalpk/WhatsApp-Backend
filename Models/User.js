@@ -60,6 +60,22 @@ const userSchema = new mongoose.Schema(
       default: [],
       select: false,
     },
+    isProfilePublic: {
+      type: Boolean,
+      default: true,
+    },
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    blockedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     contacts: [
       {
         user: {
@@ -67,6 +83,12 @@ const userSchema = new mongoose.Schema(
           ref: "User",
         },
         savedName: String,
+      },
+    ],
+    archivedChats: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Conversation",
       },
     ],
   },

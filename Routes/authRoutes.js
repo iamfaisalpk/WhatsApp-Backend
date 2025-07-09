@@ -18,7 +18,7 @@ import authMiddleware from '../Middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// ✅ Health Check Route
+//  Health Check Route
 router.get('/test', (req, res) => {
     res.json({
     message: 'Auth routes are working!',
@@ -26,20 +26,20 @@ router.get('/test', (req, res) => {
 });
 });
 
-// ✅ OTP
+//  OTP
 router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtp);
 
-// ✅ Refresh Token Login
+//  Refresh Token Login
 router.post('/refresh-token', refreshAccessToken);
 
-// ✅ Logout (single device)
+//  Logout (single device)
 router.post('/logout', authMiddleware, logoutUser);
 
-// ✅ Logout (all devices)
+//  Logout (all devices)
 router.post('/logout-all', authMiddleware, logoutAllDevices);
 
-// ✅Development Routes
+// Development Routes
 if (process.env.NODE_ENV === 'development') {
     router.get('/otp-status', getOtpStatus);
     router.get('/dev-status', getDevelopmentStatus);
