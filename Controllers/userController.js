@@ -4,23 +4,31 @@ import User from "../Models/User.js";
 export const searchUsers = async (req, res) => {
   try {
     const search = req.query.search;
-    if (!search) {
-      return res.status(400).json({ message: "Search query is required" });
+    console.log("🔍 Incoming search query:", search);
+
+    let users;
+
+    if (!search || search.toLowerCase() === "all") {
+      users = await User.find({ _id: { $ne: req.user._id } }).select(
+        "-password"
+      );
+    } else {
+
+      const keyword = {
+        $or: [{ phone: { $regex: search, $options: "i" } }],
+      };
+      users = await User.find(keyword)
+        .find({ _id: { $ne: req.user._id } })
+        .select("-password");
     }
 
-    const keyword = {
-      $or: [{ phone: { $regex: search, $options: "i" } }],
-    };
-
-    const users = await User.find(keyword).find({ _id: { $ne: req.user._id } });
-
-    if (users.length === 0) {
+    if (!users || users.length === 0) {
       return res.status(404).json({ message: "No users found" });
     }
 
     res.json(users);
   } catch (err) {
-    console.error(" Error in searchUsers:", err);
+    console.error("❌ Error in searchUsers:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -98,13 +106,16 @@ export const unblockUser = async (req, res) => {
 //  Get Blocked Users List
 export const getBlockedUsers = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate(
-      "blockedUsers",
-      "name phone profilePic"
-    );
-    res.json(user.blockedUsers);
+    const user = await User.findById(req.user.id)
+      .populate("blockedUsers", "name phone profilePic")
+      .populate("blockedBy", "name phone profilePic");
+
+    res.json({
+      iBlocked: user.blockedUsers,
+      blockedMe: user.blockedBy,
+    });
   } catch (err) {
-    console.error(" Error in getBlockedUsers:", err);
+    console.error("Error in getBlockedUsers:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

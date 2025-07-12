@@ -7,6 +7,8 @@ const chatMetaSchema = new mongoose.Schema(
     isRead: { type: Boolean, default: true },
     isFavorite: { type: Boolean, default: false },
     muted: { type: Boolean, default: false },
+    archived: { type: Boolean, default: false },
+    pinned: { type: Boolean, default: false },
     lastClearedAt: { type: Date, default: null },
     },
     { timestamps: true }

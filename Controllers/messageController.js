@@ -105,7 +105,14 @@ export const sendMessage = async (req, res) => {
 
     const populatedMessage = await Message.findById(newMessage._id)
       .populate("sender", "name profilePic")
-      .populate("replyTo")
+      .populate({
+        path: "replyTo",
+        populate: {
+          path: "sender",
+          select: "name profilePic _id",
+        },
+      })
+
       .populate("reactions.user", "name profilePic");
 
     const finalMessage = {
@@ -137,7 +144,14 @@ export const getMessages = async (req, res) => {
       deletedFor: { $ne: userId },
     })
       .populate("sender", "name profilePic")
-      .populate("replyTo")
+      .populate({
+        path: "replyTo",
+        populate: {
+          path: "sender",
+          select: "name profilePic _id",
+        },
+      })
+
       .sort({ createdAt: 1 });
 
     res.status(200).json({ messages });

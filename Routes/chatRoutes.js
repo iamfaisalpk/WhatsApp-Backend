@@ -8,7 +8,14 @@ import {
     addToGroup,
     removeFromGroup,
     leaveGroup,
-    clearChat
+    clearChat,
+    getSharedGroups,
+    deleteChat,
+    toggleFavorite,
+    toggleMuteChat,
+    toggleArchiveChat,
+    togglePinChat,
+    updateGroupAvatar
 } from '../Controllers/chatController.js';
 import { groupAvatarUpload } from '../Utils/multerSetup.js'; 
 
@@ -25,5 +32,20 @@ router.put('/rename', authMiddleware, renameGroup);
 router.put('/group-add', authMiddleware, addToGroup);
 router.put('/group-remove', authMiddleware, removeFromGroup);
 router.delete("/clear/:chatId", authMiddleware, clearChat)
+router.get("/shared-groups/:userId", authMiddleware, getSharedGroups);
+router.delete("/:chatId", authMiddleware, deleteChat);
+router.patch('/meta/:chatId/favorite', authMiddleware, toggleFavorite);
+router.patch('/meta/:chatId/mute', authMiddleware, toggleMuteChat);
+router.patch('/meta/:chatId/archive', authMiddleware, toggleArchiveChat);
+router.patch('/meta/:chatId/pin', authMiddleware, togglePinChat);
+
+router.put(
+    '/group-avatar/:chatId',
+    authMiddleware,
+    groupAvatarUpload.single('groupAvatar'),
+    updateGroupAvatar
+);
+
+
 
 export default router;
