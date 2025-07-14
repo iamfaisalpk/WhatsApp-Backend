@@ -1,35 +1,81 @@
 import Conversation from "../Models/Conversation.js";
 import ChatMeta from "../Models/ChatMeta.js";
-import User from "../Models/User.js";
 import Message from "../Models/Message.js";
+import User from "../Models/User.js";
+import mongoose from "mongoose";
 
-//  Access One-to-One Chat
 export const accessChat = async (req, res) => {
   const { userId } = req.body;
 
-  if (!userId) {
-    return res
-      .status(400)
-      .json({ success: false, message: "User ID is required" });
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Valid user ID is required",
+    });
   }
 
   try {
-    //  Block Check
-    const targetUser = await User.findById(userId);
-    if (targetUser.blockedUsers.includes(req.user.id)) {
-      return res.status(403).json({ message: "You are blocked by this user." });
+    const io = req.app.get("io");
+
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user access",
+      });
     }
 
-    //  Check if chat exists
+    const currentUserId = req.user.id;
+    console.log("📥 accessChat triggered");
+    console.log("🔑 Auth User:", currentUserId);
+    console.log("🎯 Target User:", userId);
+
+    // Fetch and validate target user
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Target user not found",
+      });
+    }
+
+    // Check if blocked
+    if (targetUser.blockedUsers?.includes(currentUserId)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are blocked by this user",
+      });
+    }
+
+    // Find existing one-to-one chat
     let chat = await Conversation.findOne({
       isGroup: false,
-      members: { $all: [req.user.id, userId], $size: 2 },
-    }).populate("members", "name profilePic isOnline lastSeen");
+      members: { $all: [currentUserId, userId], $size: 2 },
+    });
 
     if (chat) {
-      const userIds = [req.user.id, userId];
+      console.log("🟢 Existing chat found:", chat._id);
 
-      const metaResults = await Promise.all(
+      // Unhide if needed
+      if (
+        Array.isArray(chat.hiddenFor) &&
+        chat.hiddenFor.includes(currentUserId)
+      ) {
+        chat.hiddenFor = chat.hiddenFor.filter(
+          (id) => id.toString() !== currentUserId.toString()
+        );
+        await chat.save();
+        console.log("👁️ Chat unhidden for current user");
+      }
+
+      // Repopulate with member details
+      chat = await Conversation.findById(chat._id).populate(
+        "members",
+        "name profilePic isOnline lastSeen"
+      );
+
+      // Ensure ChatMeta exists
+      const userIds = [currentUserId, userId];
+      await Promise.all(
         userIds.map((id) =>
           ChatMeta.findOneAndUpdate(
             { user: id, chat: chat._id },
@@ -39,13 +85,21 @@ export const accessChat = async (req, res) => {
         )
       );
 
+      // ✅ Fixed: Added null check for io
+      if (io) {
+        io.to(currentUserId).emit("chat list updated");
+        io.to(userId).emit("chat list updated");
+      }
+
       return res.status(200).json({ success: true, chat });
     }
 
-    //  Create New Chat
+    // Create new chat if not exists
+    console.log("🆕 Creating new one-to-one chat");
+
     const newChat = await Conversation.create({
       isGroup: false,
-      members: [req.user.id, userId],
+      members: [currentUserId, userId],
     });
 
     const fullChat = await Conversation.findById(newChat._id).populate(
@@ -53,10 +107,9 @@ export const accessChat = async (req, res) => {
       "name profilePic isOnline lastSeen"
     );
 
-    const userIds = [req.user.id, userId];
-
-    const metaResults = await Promise.all(
-      userIds.map((id) =>
+    // Create ChatMeta for both users
+    await Promise.all(
+      [currentUserId, userId].map((id) =>
         ChatMeta.findOneAndUpdate(
           { user: id, chat: newChat._id },
           { $setOnInsert: { isRead: true } },
@@ -65,19 +118,36 @@ export const accessChat = async (req, res) => {
       )
     );
 
+    // ✅ Fixed: Added null check for io
+    if (io) {
+      io.to(currentUserId).emit("chat list updated");
+      io.to(userId).emit("chat list updated");
+    }
+
     return res.status(201).json({ success: true, chat: fullChat });
   } catch (error) {
-    console.error("Access Chat Error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Something went wrong" });
+    console.error("❌ accessChat error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while accessing chat",
+      error: error.message,
+    });
   }
 };
 
 export const fetchChats = async (req, res) => {
   try {
+    // ✅ Added validation for req.user
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized - no user found",
+      });
+    }
+
     const chats = await Conversation.find({
       members: req.user.id,
+      hiddenFor: { $ne: req.user.id },
     })
       .select("members isGroup groupName groupAvatar lastMessage updatedAt")
       .populate(
@@ -93,17 +163,6 @@ export const fetchChats = async (req, res) => {
         },
       })
       .sort({ updatedAt: -1 });
-
-    // Debug: Log what we get from database
-    console.log(
-      "Raw chats from DB:",
-      chats.map((chat) => ({
-        id: chat._id,
-        isGroup: chat.isGroup,
-        groupName: chat.groupName,
-        groupAvatar: chat.groupAvatar,
-      }))
-    );
 
     const chatsWithMeta = await Promise.all(
       chats.map(async (chat) => {
@@ -122,56 +181,61 @@ export const fetchChats = async (req, res) => {
 
         const chatObj = chat.toObject({ getters: true });
 
-        // Debug: Log chatObj to see what toObject returns
-        if (chatObj.isGroup) {
-          console.log("ChatObj for group:", {
-            id: chatObj._id,
-            groupName: chatObj.groupName,
-            groupAvatar: chatObj.groupAvatar,
-          });
+        // ✅ Skip if 1-to-1 chat and either user is blocked
+        if (!chatObj.isGroup) {
+          const otherUser = chatObj.members.find(
+            (m) => String(m._id) !== String(req.user.id)
+          );
+
+          if (
+            otherUser?.isBlocked === true || // you blocked them
+            otherUser?.isBlockedByMe === true // they blocked you
+          ) {
+            return null; // 🔕 skip this chat
+          }
         }
 
-        // Count unread messages for this chat
-        const unreadCount = await Message.countDocuments({
-          conversationId: chat._id,
-          sender: { $ne: req.user.id },
-          readBy: { $ne: req.user.id },
-        });
+        // ✅ Fixed: Added try-catch for unread count calculation
+        let unreadCount = 0;
+        try {
+          unreadCount = await Message.countDocuments({
+            conversationId: chat._id,
+            sender: { $ne: req.user.id },
+            readBy: { $ne: req.user.id },
+          });
+        } catch (countError) {
+          console.error("Error counting unread messages:", countError);
+          // Continue with unreadCount = 0
+        }
 
-        const finalChat = {
+        return {
           ...chatObj,
-          // ChatMeta properties
+          groupAvatar: chatObj.isGroup ? chatObj.groupAvatar || "" : undefined,
           isFavorite: meta?.isFavorite || false,
           isRead: meta?.isRead !== false,
           muted: meta?.muted || false,
           archived: meta?.archived || false,
           isPinned: meta?.pinned || false,
+          isArchived: meta?.archived || false,
           unreadCount,
         };
-
-        // Debug: Log final chat object for groups
-        if (finalChat.isGroup) {
-          console.log("Final chat object for group:", {
-            id: finalChat._id,
-            groupName: finalChat.groupName,
-            groupAvatar: finalChat.groupAvatar,
-          });
-        }
-
-        return finalChat;
       })
     );
 
-    return res.status(200).json({ success: true, chats: chatsWithMeta });
+    const visibleChats = chatsWithMeta.filter((chat) => chat !== null);
+
+    return res.status(200).json({ success: true, chats: visibleChats });
   } catch (error) {
-    console.error("Fetch Chats Error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Unable to fetch chats" });
+    console.error("❌ Fetch Chats Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch chats",
+      error: error.message,
+    });
   }
 };
 
-//  Group Chat Creation
+// Group Chat Creation
 export const createGroupChat = async (req, res) => {
   let { members, groupName } = req.body;
   const groupAvatar = req.file?.path || "";
@@ -182,13 +246,18 @@ export const createGroupChat = async (req, res) => {
       .json({ message: "Members and group name are required" });
   }
 
-  //  Fix: Parse if it's a JSON string
+  // Fix: Parse if it's a JSON string
   if (typeof members === "string") {
     try {
       members = JSON.parse(members);
     } catch (err) {
       return res.status(400).json({ message: "Invalid members format" });
     }
+  }
+
+  // ✅ Added validation for req.user
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
   const allUsers = [...members, req.user.id];
@@ -208,13 +277,23 @@ export const createGroupChat = async (req, res) => {
 
     res.status(201).json({ success: true, group: fullGroupChat });
   } catch (error) {
-    console.error("Create Group Chat Error:", error);
-    res.status(500).json({ success: false, message: "Failed to create group" });
+    console.error("❌ Create Group Chat Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create group",
+      error: error.message,
+    });
   }
 };
 
 export const renameGroup = async (req, res) => {
   const { chatId, groupName } = req.body;
+
+  if (!chatId || !groupName) {
+    return res
+      .status(400)
+      .json({ message: "Chat ID and group name are required" });
+  }
 
   try {
     const updatedChat = await Conversation.findByIdAndUpdate(
@@ -225,14 +304,29 @@ export const renameGroup = async (req, res) => {
       .populate("members", "name profilePic isOnline lastSeen")
       .populate("groupAdmin", "-otp -__v");
 
+    if (!updatedChat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
     res.status(200).json({ success: true, updatedChat });
   } catch (error) {
-    res.status(500).json({ message: "Failed to rename group" });
+    console.error("❌ Rename Group Error:", error);
+    res.status(500).json({
+      message: "Failed to rename group",
+      error: error.message,
+    });
   }
 };
 
 export const addToGroup = async (req, res) => {
   const { chatId, userId } = req.body;
+
+  // ✅ Added validation
+  if (!chatId || !userId) {
+    return res
+      .status(400)
+      .json({ message: "Chat ID and user ID are required" });
+  }
 
   try {
     const updatedChat = await Conversation.findByIdAndUpdate(
@@ -243,14 +337,29 @@ export const addToGroup = async (req, res) => {
       .populate("members", "name profilePic isOnline lastSeen")
       .populate("groupAdmin", "-otp -__v");
 
+    if (!updatedChat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
     res.status(200).json({ success: true, updatedChat });
   } catch (error) {
-    res.status(500).json({ message: "Failed to add user" });
+    console.error("❌ Add to Group Error:", error);
+    res.status(500).json({
+      message: "Failed to add user",
+      error: error.message,
+    });
   }
 };
 
 export const removeFromGroup = async (req, res) => {
   const { chatId, userId } = req.body;
+
+  // ✅ Added validation
+  if (!chatId || !userId) {
+    return res
+      .status(400)
+      .json({ message: "Chat ID and user ID are required" });
+  }
 
   try {
     const updatedChat = await Conversation.findByIdAndUpdate(
@@ -261,62 +370,151 @@ export const removeFromGroup = async (req, res) => {
       .populate("members", "name profilePic isOnline lastSeen")
       .populate("groupAdmin", "-otp -__v");
 
+    if (!updatedChat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
     res.status(200).json({ success: true, updatedChat });
   } catch (error) {
-    res.status(500).json({ message: "Failed to remove user" });
+    console.error("❌ Remove from Group Error:", error);
+    res.status(500).json({
+      message: "Failed to remove user",
+      error: error.message,
+    });
   }
 };
 
 export const deleteChat = async (req, res) => {
   const { chatId } = req.params;
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  if (!chatId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Chat ID is required" });
+  }
+
   try {
     const chat = await Conversation.findById(chatId);
-    if (!chat) return res.status(404).json({ message: "Chat not found" });
-    if (!chat.members.includes(req.user.id)) {
-      return res.status(403).json({ message: "You are not part of this chat" });
+
+    if (!chat) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Chat not found" });
     }
-    await ChatMeta.deleteMany({ chat: chatId });
 
-    await Message.deleteMany({ conversationId: chatId });
-    await chat.deleteOne();
+    if (!chat.members.includes(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this chat",
+      });
+    }
 
-    res
-      .status(200)
-      .json({ success: true, message: "Chat deleted successfully" });
+    if (chat.hiddenFor?.includes(req.user.id)) {
+      return res.status(200).json({
+        success: true,
+        message: "Chat already deleted for this user",
+      });
+    }
+
+    if (chat.isGroup && chat.groupAdmin.toString() !== req.user.id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Only group admin can delete this group chat",
+      });
+    }
+
+    await ChatMeta.deleteMany({ chat: chatId, user: req.user.id });
+    await Conversation.findByIdAndUpdate(chatId, {
+      $addToSet: { hiddenFor: req.user.id },
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(req.user.id).emit("chat list updated");
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Chat deleted successfully for this user",
+    });
   } catch (error) {
-    console.error("❌ Delete Chat Error:", error);
-    res.status(500).json({ message: "Failed to delete chat" });
+    console.error(" Delete Chat Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete chat",
+      error: error.message,
+    });
   }
 };
 
 export const leaveGroup = async (req, res) => {
   const { chatId } = req.body;
+
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   try {
     const updatedChat = await Conversation.findByIdAndUpdate(
       chatId,
       { $pull: { members: req.user.id } },
       { new: true }
     );
+
+    if (!updatedChat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
     res.status(200).json({ success: true, chat: updatedChat });
   } catch (error) {
-    res.status(500).json({ message: "Failed to leave group" });
+    console.error("❌ Leave Group Error:", error);
+    res.status(500).json({
+      message: "Failed to leave group",
+      error: error.message,
+    });
   }
 };
 
 export const clearChat = async (req, res) => {
   const { chatId } = req.params;
+
+  // ✅ Added validation
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
   try {
     await Message.deleteMany({ conversationId: chatId });
     res.status(200).json({ success: true, message: "Chat cleared" });
   } catch (error) {
-    console.error("Clear Chat Error:", error);
-    res.status(500).json({ message: "Failed to clear chat" });
+    console.error("❌ Clear Chat Error:", error);
+    res.status(500).json({
+      message: "Failed to clear chat",
+      error: error.message,
+    });
   }
 };
 
-//  Get Shared Groups Between Two Users
+// Get Shared Groups Between Two Users
 export const getSharedGroups = async (req, res) => {
   const { userId } = req.params;
+
+  // ✅ Added validation
+  if (!userId) {
+    return res.status(400).json({ message: "User ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 
   try {
     const sharedGroups = await Conversation.find({
@@ -329,16 +527,27 @@ export const getSharedGroups = async (req, res) => {
 
     res.status(200).json({ success: true, groups: sharedGroups });
   } catch (error) {
-    console.error("Get Shared Groups Error:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch shared groups" });
+    console.error("❌ Get Shared Groups Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch shared groups",
+      error: error.message,
+    });
   }
 };
 
 // ✅ Toggle Favorite
 export const toggleFavorite = async (req, res) => {
   const { chatId } = req.params;
+
+  // ✅ Added validation
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 
   try {
     let meta = await ChatMeta.findOne({
@@ -365,10 +574,11 @@ export const toggleFavorite = async (req, res) => {
       isFavorite: meta.isFavorite,
     });
   } catch (error) {
-    console.error("Toggle Favorite Error:", error.message);
+    console.error("❌ Toggle Favorite Error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to update favorite status",
+      error: error.message,
     });
   }
 };
@@ -376,9 +586,20 @@ export const toggleFavorite = async (req, res) => {
 export const toggleMuteChat = async (req, res) => {
   const { chatId } = req.params;
 
+  // ✅ Added validation
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   try {
     const meta = await ChatMeta.findOne({ user: req.user.id, chat: chatId });
-    if (!meta) return res.status(404).json({ message: "ChatMeta not found" });
+    if (!meta) {
+      return res.status(404).json({ message: "ChatMeta not found" });
+    }
 
     meta.muted = !meta.muted;
     await meta.save();
@@ -388,17 +609,31 @@ export const toggleMuteChat = async (req, res) => {
       message: `Chat ${meta.muted ? "muted" : "unmuted"}`,
     });
   } catch (error) {
-    console.error("Mute Error:", error);
-    res.status(500).json({ message: "Failed to toggle mute" });
+    console.error("❌ Mute Error:", error);
+    res.status(500).json({
+      message: "Failed to toggle mute",
+      error: error.message,
+    });
   }
 };
 
 export const toggleArchiveChat = async (req, res) => {
   const { chatId } = req.params;
 
+  // ✅ Added validation
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   try {
     const meta = await ChatMeta.findOne({ user: req.user.id, chat: chatId });
-    if (!meta) return res.status(404).json({ message: "ChatMeta not found" });
+    if (!meta) {
+      return res.status(404).json({ message: "ChatMeta not found" });
+    }
 
     meta.archived = !meta.archived;
     await meta.save();
@@ -408,17 +643,31 @@ export const toggleArchiveChat = async (req, res) => {
       message: `Chat ${meta.archived ? "archived" : "unarchived"}`,
     });
   } catch (error) {
-    console.error("Archive Error:", error);
-    res.status(500).json({ message: "Failed to toggle archive" });
+    console.error("❌ Archive Error:", error);
+    res.status(500).json({
+      message: "Failed to toggle archive",
+      error: error.message,
+    });
   }
 };
 
 export const togglePinChat = async (req, res) => {
   const { chatId } = req.params;
 
+  // ✅ Added validation
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   try {
     const meta = await ChatMeta.findOne({ user: req.user.id, chat: chatId });
-    if (!meta) return res.status(404).json({ message: "ChatMeta not found" });
+    if (!meta) {
+      return res.status(404).json({ message: "ChatMeta not found" });
+    }
 
     meta.pinned = !meta.pinned;
     await meta.save();
@@ -428,15 +677,26 @@ export const togglePinChat = async (req, res) => {
       message: `Chat ${meta.pinned ? "pinned" : "unpinned"}`,
     });
   } catch (error) {
-    console.error("Pin Error:", error);
-    res.status(500).json({ message: "Failed to toggle pin" });
+    console.error("❌ Pin Error:", error);
+    res.status(500).json({
+      message: "Failed to toggle pin",
+      error: error.message,
+    });
   }
 };
 
-// Add this function to your existing chatController.js file
-
 export const updateGroupAvatar = async (req, res) => {
   const { chatId } = req.params;
+
+  // ✅ Added validation
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   const userId = req.user.id;
 
   try {

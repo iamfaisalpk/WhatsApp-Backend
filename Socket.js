@@ -3,11 +3,13 @@ import jwt from "jsonwebtoken";
 import User from "./Models/User.js";
 import Message from "./Models/Message.js";
 import Conversation from "./Models/Conversation.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 export function setupSocket(server, app) {
   const io = new SocketIOServer(server, {
     cors: {
-      origin: "http://localhost:5173",
+      origin: process.env.CLIENT_URL,
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -43,7 +45,7 @@ export function setupSocket(server, app) {
     //  Notify others that this user is online
     socket.broadcast.emit("user-status", { userId, isOnline: true });
 
-    socket.on("join-chat", async (conversationId) => {
+    socket.on("join chat", async (conversationId) => {
       if (conversationId) {
         socket.join(conversationId);
         console.log(`User ${userId} joined room: ${conversationId}`);
@@ -112,9 +114,20 @@ export function setupSocket(server, app) {
           },
         });
 
-        socket.to(conversationId).emit("message-received", {
+        io.to(conversationId).emit("message received", {
           ...populatedMsg.toObject(),
           tempId,
+        });
+
+        const updatedConversation = await Conversation.findById(conversationId)
+          .populate("participants", "name profilePic phone")
+          .populate("lastMessage.sender", "name profilePic");
+
+        updatedConversation.participants.forEach((participant) => {
+          const socketId = onlineUsers.get(participant._id.toString());
+          if (socketId) {
+            io.to(socketId).emit("chat updated", updatedConversation);
+          }
         });
 
         //  Get all active users in the conversation
@@ -213,8 +226,6 @@ export function setupSocket(server, app) {
         // Get user info for the seen update
         const user = await User.findById(userId).select("name profilePic");
 
-        // IMPORTANT: Emit to ALL users in the conversation, including the current user
-        // This ensures the person who marked as seen also sees their own blue ticks
         io.to(conversationId).emit("seen-update", {
           conversationId,
           seenBy: {
@@ -222,14 +233,14 @@ export function setupSocket(server, app) {
             name: user.name,
             profilePic: user.profilePic,
           },
-          messageIds: messageIds.map((id) => id.toString()), // Convert to strings for consistency
+          messageIds: messageIds.map((id) => id.toString()),
         });
 
         console.log(
-          `✅ Seen update emitted to all users in ${conversationId} for ${messageIds.length} messages by user ${userId}`
+          `Seen update emitted to all users in ${conversationId} for ${messageIds.length} messages by user ${userId}`
         );
       } catch (err) {
-        console.error("❌ Seen update failed:", err.message);
+        console.error(" Seen update failed:", err.message);
       }
     });
 

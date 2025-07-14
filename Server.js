@@ -27,7 +27,7 @@ connectDB();
 // Middlewares
 app.use(express.json({ limit: "10mb" }));
 app.use(cors({
-  origin: ["http://localhost:5173"],
+  origin: [process.env.CLIENT_URL],
   credentials: true,
 }));
 
@@ -61,7 +61,7 @@ app.use(errorHandler);
 setupSocket(server, app);
 
 // Server Listen
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT
 
 server.listen(PORT, () => {
     console.log(`\n Server running on http://localhost:${PORT}`);

@@ -5,13 +5,11 @@ export const sendMessage = async (req, res) => {
   try {
     console.log(" Incoming request body:", req.body);
     console.log(" Incoming files:", req.files);
-
     const { conversationId, text, duration, replyTo, forwardFrom, tempId } =
       req.body;
     console.log("incoming reqbody", req.body);
     console.log("incoming files", req.files);
     const senderId = req.user.id;
-
     const mediaFile = req.files?.media?.[0];
     const voiceNoteFile = req.files?.voiceNote?.[0];
 
@@ -29,11 +27,9 @@ export const sendMessage = async (req, res) => {
     const conversation = await Conversation.findById(conversationId).populate(
       "members"
     );
-
     const receiver = conversation.members.find(
       (member) => member._id.toString() !== senderId
     );
-
     if (receiver?.blockedUsers?.includes(senderId)) {
       return res.status(403).json({
         success: false,
@@ -43,11 +39,9 @@ export const sendMessage = async (req, res) => {
 
     let media = null;
     let voiceNote = null;
-
     if (mediaFile) {
       const uploaded = mediaFile;
       const fileType = uploaded.mimetype;
-
       media = {
         url: uploaded.path,
         type: fileType.startsWith("image")
@@ -60,7 +54,6 @@ export const sendMessage = async (req, res) => {
         originalName: uploaded.originalname,
       };
     }
-
     if (voiceNoteFile) {
       const uploaded = voiceNoteFile;
       voiceNote = {
@@ -77,31 +70,36 @@ export const sendMessage = async (req, res) => {
       voiceNote,
       replyTo: replyTo || null,
       forwardFrom: forwardFrom ? JSON.parse(forwardFrom) : null,
-      seenBy: [senderId],
+      readBy: [senderId],
       status: "sent",
       tempId: tempId || null,
     });
 
-    await Conversation.findByIdAndUpdate(conversationId, {
-      lastMessage: {
-        text:
-          newMessage.text ||
-          (media?.type === "image"
-            ? "📷 Photo"
-            : media?.type === "video"
-            ? "🎥 Video"
-            : media?.type === "file"
-            ? "📎 File"
-            : voiceNote
-            ? "🎤 Voice Note"
-            : forwardFrom
-            ? "📩 Forwarded message"
-            : "📎 Media"),
-        sender: senderId,
-        timestamp: newMessage.createdAt,
+    // Update conversation with last message
+    const updatedConversation = await Conversation.findByIdAndUpdate(
+      conversationId,
+      {
+        lastMessage: {
+          text:
+            newMessage.text ||
+            (media?.type === "image"
+              ? "📷 Photo"
+              : media?.type === "video"
+              ? "🎥 Video"
+              : media?.type === "file"
+              ? "📎 File"
+              : voiceNote
+              ? "🎤 Voice Note"
+              : forwardFrom
+              ? "📩 Forwarded message"
+              : "📎 Media"),
+          sender: senderId,
+          timestamp: newMessage.createdAt,
+        },
+        updatedAt: new Date(),
       },
-      updatedAt: new Date(),
-    });
+      { new: true }
+    ).populate("members", "name profilePic isOnline lastSeen");
 
     const populatedMessage = await Message.findById(newMessage._id)
       .populate("sender", "name profilePic")
@@ -112,7 +110,6 @@ export const sendMessage = async (req, res) => {
           select: "name profilePic _id",
         },
       })
-
       .populate("reactions.user", "name profilePic");
 
     const finalMessage = {
@@ -120,7 +117,20 @@ export const sendMessage = async (req, res) => {
       tempId: tempId || null,
     };
 
-    req.app.locals.io.to(conversationId).emit("message-received", finalMessage);
+    req.app.locals.io.to(conversationId).emit("message received", finalMessage);
+
+
+    conversation.members.forEach((member) => {
+      req.app.locals.io.to(member._id.toString()).emit("conversation-updated", {
+        conversationId: conversationId,
+        lastMessage: {
+          text: updatedConversation.lastMessage.text,
+          sender: senderId,
+          timestamp: newMessage.createdAt,
+        },
+        updatedAt: updatedConversation.updatedAt,
+      });
+    });
 
     return res.status(201).json({
       success: true,
@@ -172,25 +182,39 @@ export const markAsSeen = async (req, res) => {
         .json({ success: false, message: "Conversation ID is required" });
     }
 
+    // Update unseen messages
     await Message.updateMany(
       {
         conversationId,
         sender: { $ne: userId },
-        seenBy: { $ne: userId },
+        readBy: { $ne: userId },
         deletedFor: { $ne: userId },
       },
-      { $addToSet: { seenBy: userId } }
+      { $addToSet: { readBy: userId } }
     );
 
-    // Emit realtime seen-update to other users in the conversation
+    const updatedMessages = await Message.find({
+      conversationId,
+      sender: { $ne: userId },
+      readBy: userId,
+      deletedFor: { $ne: userId },
+    }).select("_id");
+
+    const messageIds = updatedMessages.map((msg) => msg._id);
+
     req.app.locals.io.to(conversationId).emit("seen-update", {
       conversationId,
-      seenBy: userId,
+      readBy: userId,
+      messageIds,
     });
 
-    res.status(200).json({ success: true, message: "Messages marked as seen" });
+    res.status(200).json({
+      success: true,
+      message: "Messages marked as seen",
+      messageIds,
+    });
   } catch (error) {
-    console.error(" Mark as seen error:", error);
+    console.error("Mark as seen error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

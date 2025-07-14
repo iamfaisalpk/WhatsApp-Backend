@@ -24,7 +24,7 @@ const messageSchema = new mongoose.Schema(
       url: String,
       duration: Number,
     },
-    seenBy: [
+    readBy: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",

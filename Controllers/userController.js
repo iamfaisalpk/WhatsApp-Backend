@@ -13,7 +13,6 @@ export const searchUsers = async (req, res) => {
         "-password"
       );
     } else {
-
       const keyword = {
         $or: [{ phone: { $regex: search, $options: "i" } }],
       };
@@ -72,6 +71,9 @@ export const blockUser = async (req, res) => {
     blocked.blockedBy.push(req.user.id);
     await blocked.save();
 
+    // 🔥 Emit to self (blocker)
+    req.app.locals.io.to(req.user.id).emit("block status updated");
+
     res.json({ message: "User blocked successfully." });
   } catch (err) {
     console.error(" Error in blockUser:", err);
@@ -95,6 +97,9 @@ export const unblockUser = async (req, res) => {
       (userId) => userId.toString() !== req.user.id
     );
     await blocked.save();
+
+    // Emit to self (blocker)
+    req.app.locals.io.to(req.user.id).emit("block status updated");
 
     res.json({ message: "User unblocked successfully." });
   } catch (err) {

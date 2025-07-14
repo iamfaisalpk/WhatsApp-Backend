@@ -26,6 +26,7 @@ const conversationSchema = new mongoose.Schema(
     //  New fields
     hiddenFor: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     pinnedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    isDeleted: { type: Boolean, default: false },
     },
     { timestamps: true }
 );
