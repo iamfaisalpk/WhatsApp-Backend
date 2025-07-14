@@ -25,9 +25,9 @@ export const accessChat = async (req, res) => {
     }
 
     const currentUserId = req.user.id;
-    console.log("📥 accessChat triggered");
-    console.log("🔑 Auth User:", currentUserId);
-    console.log("🎯 Target User:", userId);
+    console.log(" accessChat triggered");
+    console.log(" Auth User:", currentUserId);
+    console.log(" Target User:", userId);
 
     // Fetch and validate target user
     const targetUser = await User.findById(userId);
@@ -126,7 +126,7 @@ export const accessChat = async (req, res) => {
 
     return res.status(201).json({ success: true, chat: fullChat });
   } catch (error) {
-    console.error("❌ accessChat error:", error);
+    console.error(" accessChat error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error while accessing chat",
@@ -137,7 +137,6 @@ export const accessChat = async (req, res) => {
 
 export const fetchChats = async (req, res) => {
   try {
-    // ✅ Added validation for req.user
     if (!req.user || !req.user.id) {
       return res.status(401).json({
         success: false,
@@ -181,21 +180,19 @@ export const fetchChats = async (req, res) => {
 
         const chatObj = chat.toObject({ getters: true });
 
-        // ✅ Skip if 1-to-1 chat and either user is blocked
         if (!chatObj.isGroup) {
           const otherUser = chatObj.members.find(
             (m) => String(m._id) !== String(req.user.id)
           );
 
           if (
-            otherUser?.isBlocked === true || // you blocked them
-            otherUser?.isBlockedByMe === true // they blocked you
+            otherUser?.isBlocked === true || 
+            otherUser?.isBlockedByMe === true
           ) {
-            return null; // 🔕 skip this chat
+            return null; 
           }
         }
 
-        // ✅ Fixed: Added try-catch for unread count calculation
         let unreadCount = 0;
         try {
           unreadCount = await Message.countDocuments({
@@ -224,9 +221,16 @@ export const fetchChats = async (req, res) => {
 
     const visibleChats = chatsWithMeta.filter((chat) => chat !== null);
 
-    return res.status(200).json({ success: true, chats: visibleChats });
+    const archivedChats = visibleChats.filter((chat) => chat.isArchived);
+    const activeChats = visibleChats.filter((chat) => !chat.isArchived);
+
+    return res.status(200).json({
+      success: true,
+      activeChats,
+      archivedChats,
+    });
   } catch (error) {
-    console.error("❌ Fetch Chats Error:", error);
+    console.error(" Fetch Chats Error:", error);
     return res.status(500).json({
       success: false,
       message: "Unable to fetch chats",
@@ -246,7 +250,6 @@ export const createGroupChat = async (req, res) => {
       .json({ message: "Members and group name are required" });
   }
 
-  // Fix: Parse if it's a JSON string
   if (typeof members === "string") {
     try {
       members = JSON.parse(members);
@@ -255,7 +258,6 @@ export const createGroupChat = async (req, res) => {
     }
   }
 
-  // ✅ Added validation for req.user
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -277,7 +279,7 @@ export const createGroupChat = async (req, res) => {
 
     res.status(201).json({ success: true, group: fullGroupChat });
   } catch (error) {
-    console.error("❌ Create Group Chat Error:", error);
+    console.error(" Create Group Chat Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create group",
@@ -310,7 +312,7 @@ export const renameGroup = async (req, res) => {
 
     res.status(200).json({ success: true, updatedChat });
   } catch (error) {
-    console.error("❌ Rename Group Error:", error);
+    console.error("Rename Group Error:", error);
     res.status(500).json({
       message: "Failed to rename group",
       error: error.message,
@@ -321,7 +323,6 @@ export const renameGroup = async (req, res) => {
 export const addToGroup = async (req, res) => {
   const { chatId, userId } = req.body;
 
-  // ✅ Added validation
   if (!chatId || !userId) {
     return res
       .status(400)
@@ -343,7 +344,7 @@ export const addToGroup = async (req, res) => {
 
     res.status(200).json({ success: true, updatedChat });
   } catch (error) {
-    console.error("❌ Add to Group Error:", error);
+    console.error(" Add to Group Error:", error);
     res.status(500).json({
       message: "Failed to add user",
       error: error.message,
@@ -354,7 +355,6 @@ export const addToGroup = async (req, res) => {
 export const removeFromGroup = async (req, res) => {
   const { chatId, userId } = req.body;
 
-  // ✅ Added validation
   if (!chatId || !userId) {
     return res
       .status(400)
@@ -376,7 +376,7 @@ export const removeFromGroup = async (req, res) => {
 
     res.status(200).json({ success: true, updatedChat });
   } catch (error) {
-    console.error("❌ Remove from Group Error:", error);
+    console.error("Remove from Group Error:", error);
     res.status(500).json({
       message: "Failed to remove user",
       error: error.message,
@@ -475,7 +475,7 @@ export const leaveGroup = async (req, res) => {
 
     res.status(200).json({ success: true, chat: updatedChat });
   } catch (error) {
-    console.error("❌ Leave Group Error:", error);
+    console.error("Leave Group Error:", error);
     res.status(500).json({
       message: "Failed to leave group",
       error: error.message,
@@ -486,7 +486,6 @@ export const leaveGroup = async (req, res) => {
 export const clearChat = async (req, res) => {
   const { chatId } = req.params;
 
-  // ✅ Added validation
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required" });
   }
@@ -495,7 +494,7 @@ export const clearChat = async (req, res) => {
     await Message.deleteMany({ conversationId: chatId });
     res.status(200).json({ success: true, message: "Chat cleared" });
   } catch (error) {
-    console.error("❌ Clear Chat Error:", error);
+    console.error(" Clear Chat Error:", error);
     res.status(500).json({
       message: "Failed to clear chat",
       error: error.message,
@@ -507,7 +506,6 @@ export const clearChat = async (req, res) => {
 export const getSharedGroups = async (req, res) => {
   const { userId } = req.params;
 
-  // ✅ Added validation
   if (!userId) {
     return res.status(400).json({ message: "User ID is required" });
   }
@@ -527,7 +525,7 @@ export const getSharedGroups = async (req, res) => {
 
     res.status(200).json({ success: true, groups: sharedGroups });
   } catch (error) {
-    console.error("❌ Get Shared Groups Error:", error);
+    console.error(" Get Shared Groups Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch shared groups",
@@ -536,11 +534,9 @@ export const getSharedGroups = async (req, res) => {
   }
 };
 
-// ✅ Toggle Favorite
 export const toggleFavorite = async (req, res) => {
   const { chatId } = req.params;
 
-  // ✅ Added validation
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required" });
   }
@@ -574,7 +570,7 @@ export const toggleFavorite = async (req, res) => {
       isFavorite: meta.isFavorite,
     });
   } catch (error) {
-    console.error("❌ Toggle Favorite Error:", error);
+    console.error(" Toggle Favorite Error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to update favorite status",
@@ -586,7 +582,6 @@ export const toggleFavorite = async (req, res) => {
 export const toggleMuteChat = async (req, res) => {
   const { chatId } = req.params;
 
-  // ✅ Added validation
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required" });
   }
@@ -620,7 +615,6 @@ export const toggleMuteChat = async (req, res) => {
 export const toggleArchiveChat = async (req, res) => {
   const { chatId } = req.params;
 
-  // ✅ Added validation
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required" });
   }
@@ -654,7 +648,6 @@ export const toggleArchiveChat = async (req, res) => {
 export const togglePinChat = async (req, res) => {
   const { chatId } = req.params;
 
-  // ✅ Added validation
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required" });
   }
@@ -677,7 +670,7 @@ export const togglePinChat = async (req, res) => {
       message: `Chat ${meta.pinned ? "pinned" : "unpinned"}`,
     });
   } catch (error) {
-    console.error("❌ Pin Error:", error);
+    console.error("Pin Error:", error);
     res.status(500).json({
       message: "Failed to toggle pin",
       error: error.message,
@@ -688,7 +681,6 @@ export const togglePinChat = async (req, res) => {
 export const updateGroupAvatar = async (req, res) => {
   const { chatId } = req.params;
 
-  // ✅ Added validation
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required" });
   }
@@ -700,7 +692,6 @@ export const updateGroupAvatar = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    // Check if file is provided
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -708,7 +699,6 @@ export const updateGroupAvatar = async (req, res) => {
       });
     }
 
-    // Find the chat and verify it exists
     const chat = await Conversation.findById(chatId);
     if (!chat) {
       return res.status(404).json({
@@ -717,7 +707,6 @@ export const updateGroupAvatar = async (req, res) => {
       });
     }
 
-    // Check if it's a group chat
     if (!chat.isGroup) {
       return res.status(400).json({
         success: false,
@@ -725,7 +714,6 @@ export const updateGroupAvatar = async (req, res) => {
       });
     }
 
-    // Check if user is group admin
     if (chat.groupAdmin.toString() !== userId.toString()) {
       return res.status(403).json({
         success: false,
@@ -733,10 +721,8 @@ export const updateGroupAvatar = async (req, res) => {
       });
     }
 
-    // Since you're using CloudinaryStorage, req.file.path contains the Cloudinary URL
     const groupAvatar = req.file.path;
 
-    // Update the chat with new avatar
     const updatedChat = await Conversation.findByIdAndUpdate(
       chatId,
       { groupAvatar },
@@ -753,7 +739,7 @@ export const updateGroupAvatar = async (req, res) => {
       groupAvatar,
     });
   } catch (error) {
-    console.error("❌ Update group avatar error:", error);
+    console.error(" Update group avatar error:", error);
     res.status(500).json({
       success: false,
       message: "Server error while updating group avatar",
