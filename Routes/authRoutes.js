@@ -34,7 +34,7 @@ router.post('/verify-otp', verifyOtp);
 router.post('/refresh-token', refreshAccessToken);
 
 //  Logout (single device)
-router.post('/logout', authMiddleware, logoutUser);
+router.post('/logout', logoutUser);
 
 //  Logout (all devices)
 router.post('/logout-all', authMiddleware, logoutAllDevices);

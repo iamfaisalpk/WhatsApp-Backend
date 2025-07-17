@@ -1,25 +1,26 @@
 import User from "../Models/User.js";
 
 //  Search Users
+// Search Users (with phone, name, or username)
 export const searchUsers = async (req, res) => {
   try {
-    const search = req.query.search;
-    console.log("🔍 Incoming search query:", search);
+    const search = req.query.search || "";
 
-    let users;
+    // Build dynamic search query
+    const keyword = search
+      ? {
+          $or: [
+            { phone: { $regex: search, $options: "i" } },
+            { name: { $regex: search, $options: "i" } },
+            { username: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
 
-    if (!search || search.toLowerCase() === "all") {
-      users = await User.find({ _id: { $ne: req.user._id } }).select(
-        "-password"
-      );
-    } else {
-      const keyword = {
-        $or: [{ phone: { $regex: search, $options: "i" } }],
-      };
-      users = await User.find(keyword)
-        .find({ _id: { $ne: req.user._id } })
-        .select("-password");
-    }
+    const users = await User.find({
+      ...keyword,
+      _id: { $ne: req.user._id }, 
+    }).select("name phone username profilePic isOnline");
 
     if (!users || users.length === 0) {
       return res.status(404).json({ message: "No users found" });
@@ -27,7 +28,7 @@ export const searchUsers = async (req, res) => {
 
     res.json(users);
   } catch (err) {
-    console.error("❌ Error in searchUsers:", err);
+    console.error(" Error in searchUsers:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 };

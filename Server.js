@@ -60,6 +60,8 @@ app.use(errorHandler);
 // Socket.io setup
 setupSocket(server, app);
 
+server.timeout = 120000;
+
 // Server Listen
 const PORT = process.env.PORT
 

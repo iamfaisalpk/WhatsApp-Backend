@@ -83,16 +83,16 @@ export const sendMessage = async (req, res) => {
           text:
             newMessage.text ||
             (media?.type === "image"
-              ? "📷 Photo"
+              ? " Photo"
               : media?.type === "video"
-              ? "🎥 Video"
+              ? " Video"
               : media?.type === "file"
-              ? "📎 File"
+              ? " File"
               : voiceNote
-              ? "🎤 Voice Note"
+              ? " Voice Note"
               : forwardFrom
-              ? "📩 Forwarded message"
-              : "📎 Media"),
+              ? " Forwarded message"
+              : " Media"),
           sender: senderId,
           timestamp: newMessage.createdAt,
         },

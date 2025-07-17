@@ -15,7 +15,11 @@ import {
     toggleMuteChat,
     toggleArchiveChat,
     togglePinChat,
-    updateGroupAvatar
+    updateGroupAvatar,
+    joinGroupViaInvite,
+    getGroupInfo,
+    updateGroupDescription,
+    inviteGroupPreview
 } from '../Controllers/chatController.js';
 import { groupAvatarUpload } from '../Utils/multerSetup.js'; 
 
@@ -37,7 +41,12 @@ router.delete("/:chatId", authMiddleware, deleteChat);
 router.patch('/meta/:chatId/favorite', authMiddleware, toggleFavorite);
 router.patch('/meta/:chatId/mute', authMiddleware, toggleMuteChat);
 router.patch('/meta/:chatId/archive', authMiddleware, toggleArchiveChat);
-router.patch('/meta/:chatId/pin', authMiddleware, togglePinChat);
+router.patch('/meta/:chatId/pin', authMiddleware, togglePinChat); 
+router.post('/join/:inviteToken', authMiddleware, joinGroupViaInvite);
+router.get("/:chatId", authMiddleware, getGroupInfo);
+router.put("/group/:chatId/description", authMiddleware, updateGroupDescription);
+router.get("/invite/:inviteToken", authMiddleware, inviteGroupPreview);
+
 
 router.put(
     '/group-avatar/:chatId',

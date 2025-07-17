@@ -2,7 +2,7 @@ import multer from 'multer';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import cloudinary from '../config/cloudinary.js';
 
-// ✅ General storage configuration for regular uploads
+//  General storage configuration for regular uploads
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -13,7 +13,7 @@ const storage = new CloudinaryStorage({
   },
 });
 
-// ✅ Group Avatar specific storage configuration
+//  Group Avatar specific storage configuration
 const groupAvatarStorage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -27,7 +27,7 @@ const groupAvatarStorage = new CloudinaryStorage({
   },
 });
 
-// ✅ Profile Avatar specific storage configuration
+//  Profile Avatar specific storage configuration
 const profileAvatarStorage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -41,7 +41,7 @@ const profileAvatarStorage = new CloudinaryStorage({
   },
 });
 
-// ✅ General file filter
+//  General file filter
 const generalFileFilter = (req, file, cb) => {
   console.log("📎 Uploading file:", file.originalname, "| Type:", file.mimetype);
   
@@ -62,7 +62,7 @@ const generalFileFilter = (req, file, cb) => {
   }
 };
 
-// ✅ Group Avatar specific file filter
+//  Group Avatar specific file filter
 const groupAvatarFileFilter = (req, file, cb) => {
   console.log("📎 Uploading group avatar:", file.originalname, "| Type:", file.mimetype);
   
@@ -78,7 +78,7 @@ const groupAvatarFileFilter = (req, file, cb) => {
   }
 };
 
-// ✅ Profile Avatar specific file filter
+//  Profile Avatar specific file filter
 const profileAvatarFileFilter = (req, file, cb) => {
   console.log("📎 Uploading profile avatar:", file.originalname, "| Type:", file.mimetype);
   
@@ -94,7 +94,7 @@ const profileAvatarFileFilter = (req, file, cb) => {
   }
 };
 
-// ✅ General upload middleware
+//  General upload middleware
 const upload = multer({
   storage: storage,
   limits: {
@@ -103,7 +103,7 @@ const upload = multer({
   fileFilter: generalFileFilter,
 });
 
-// ✅ Group Avatar upload middleware
+//  Group Avatar upload middleware
 export const groupAvatarUpload = multer({
   storage: groupAvatarStorage,
   limits: {
@@ -112,7 +112,7 @@ export const groupAvatarUpload = multer({
   fileFilter: groupAvatarFileFilter,
 });
 
-// ✅ Profile Avatar upload middleware
+//  Profile Avatar upload middleware
 export const profileAvatarUpload = multer({
   storage: profileAvatarStorage,
   limits: {
@@ -121,7 +121,7 @@ export const profileAvatarUpload = multer({
   fileFilter: profileAvatarFileFilter,
 });
 
-// ✅ Image-only upload middleware (for general image uploads)
+//  Image-only upload middleware (for general image uploads)
 export const imageUpload = multer({
   storage: storage,
   limits: {
@@ -140,7 +140,7 @@ export const imageUpload = multer({
   },
 });
 
-// ✅ Video-only upload middleware
+//  Video-only upload middleware
 export const videoUpload = multer({
   storage: storage,
   limits: {
@@ -159,30 +159,30 @@ export const videoUpload = multer({
   },
 });
 
-// ✅ Utility functions for different upload scenarios
+//  Utility functions for different upload scenarios
 export const uploadSingle = (fieldName) => upload.single(fieldName);
 export const uploadFields = (fields) => upload.fields(fields);
 export const uploadAny = upload.any();
 export const uploadArray = (fieldName, maxCount = 10) => upload.array(fieldName, maxCount);
 
-// ✅ Specialized upload functions
+//  Specialized upload functions
 export const uploadGroupAvatar = (fieldName = 'groupAvatar') => groupAvatarUpload.single(fieldName);
 export const uploadProfileAvatar = (fieldName = 'profileAvatar') => profileAvatarUpload.single(fieldName);
 export const uploadImage = (fieldName = 'image') => imageUpload.single(fieldName);
 export const uploadVideo = (fieldName = 'video') => videoUpload.single(fieldName);
 
-// ✅ Multiple file uploads
+//  Multiple file uploads
 export const uploadMultipleImages = (fieldName = 'images', maxCount = 10) => 
   imageUpload.array(fieldName, maxCount);
 
-// ✅ Mixed field uploads for chat messages
+//  Mixed field uploads for chat messages
 export const uploadChatFiles = uploadFields([
   { name: 'image', maxCount: 5 },
   { name: 'video', maxCount: 2 },
   { name: 'document', maxCount: 3 }
 ]);
 
-// ✅ Error handling middleware
+//  Error handling middleware
 export const handleMulterError = (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     switch (error.code) {

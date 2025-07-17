@@ -34,7 +34,7 @@ export function setupSocket(server, app) {
 
   io.on("connection", (socket) => {
     const userId = socket.userId;
-    console.log(`🟢 Socket connected: ${socket.id} (User: ${userId})`);
+    console.log(` Socket connected: ${socket.id} (User: ${userId})`);
     onlineUsers.set(userId, socket.id);
 
     //  Mark user online
@@ -44,6 +44,22 @@ export function setupSocket(server, app) {
 
     //  Notify others that this user is online
     socket.broadcast.emit("user-status", { userId, isOnline: true });
+
+    socket.on("description-updated", async ({ chatId, description }) => {
+      try {
+        io.to(chatId).emit("group-description-updated", {
+          chatId,
+          description,
+          updatedAt: new Date(),
+        });
+
+        console.log(
+          `Group description updated in real-time for chat ${chatId}`
+        );
+      } catch (err) {
+        console.error("Group description real-time update error:", err.message);
+      }
+    });
 
     socket.on("join chat", async (conversationId) => {
       if (conversationId) {
@@ -95,10 +111,16 @@ export function setupSocket(server, app) {
           replyTo,
         });
 
-        const populatedMsg = await newMessage.populate(
-          "sender",
-          "name profilePic"
-        );
+        const populatedMsg = await Message.findById(newMessage._id)
+          .populate("sender", "name profilePic")
+          .populate({
+            path: "replyTo",
+            populate: {
+              path: "sender",
+              select: "name profilePic _id",
+            },
+          })
+          .populate("reactions.user", "name profilePic");
 
         await Conversation.findByIdAndUpdate(conversationId, {
           lastMessage: {
