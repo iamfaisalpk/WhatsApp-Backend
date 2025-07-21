@@ -2,13 +2,12 @@ import multer from "multer";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import cloudinary from "../config/cloudinary.js";
 
-// ✅ Logging Cloudinary environment check
-console.log("🔧 Cloudinary Config Check:");
-console.log("  - CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME ? "✅" : "❌ Missing");
-console.log("  - API_KEY:", process.env.CLOUDINARY_API_KEY ? "✅" : "❌ Missing");
-console.log("  - API_SECRET:", process.env.CLOUDINARY_API_SECRET ? "✅" : "❌ Missing");
+//  Logging Cloudinary environment check
+console.log(" Cloudinary Config Check:");
+console.log("  - CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME ? "" : " Missing");
+console.log("  - API_KEY:", process.env.CLOUDINARY_API_KEY ? "" : " Missing");
+console.log("  - API_SECRET:", process.env.CLOUDINARY_API_SECRET ? "" : " Missing");
 
-// ✅ Set up Cloudinary storage using multer-storage-cloudinary
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
@@ -16,7 +15,6 @@ const storage = new CloudinaryStorage({
     const isAudio = file.mimetype.startsWith("audio");
     const isVideo = file.mimetype.startsWith("video");
 
-    // 📂 Default folder
     let folder = "whatsapp-clone/files";
     if (isImage) folder = "whatsapp-clone/images";
     else if (isAudio) folder = "whatsapp-clone/audio";
@@ -24,27 +22,22 @@ const storage = new CloudinaryStorage({
 
     return {
       folder,
-      resource_type: "auto", // 🧠 auto: Cloudinary auto-detects media type
+      resource_type: "auto", 
       allowed_formats: [
-        // 📸 Images
         "jpg", "jpeg", "png", "webp",
-        // 🎥 Videos
         "mp4", "webm", "mov",
-        // 🔊 Audio
         "mp3", "wav", "ogg", "m4a", "webm",
-        // 📄 Documents
         "pdf"
       ],
       transformation: isImage
-        ? [{ width: 500, height: 500, crop: "limit" }] // 🖼️ Resize images
+        ? [{ width: 500, height: 500, crop: "limit" }] 
         : [],
     };
   },
 });
 
-// ✅ File filter for accepted MIME types
 const fileFilter = (req, file, cb) => {
-  console.log("📎 Uploading file:", file.originalname, "| Type:", file.mimetype);
+  console.log(" Uploading file:", file.originalname, "| Type:", file.mimetype);
 
   const allowedMimeTypes = [
     "image/jpeg", "image/jpg", "image/png", "image/webp",
@@ -56,12 +49,12 @@ const fileFilter = (req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    console.warn("❌ Rejected file type:", file.mimetype);
+    console.warn(" Rejected file type:", file.mimetype);
     cb(new Error(`File type not allowed: ${file.mimetype}`));
   }
 };
 
-// ✅ Multer setup
+//  Multer setup
 const upload = multer({
   storage,
   limits: {
@@ -70,7 +63,7 @@ const upload = multer({
   fileFilter,
 });
 
-// ✅ Export reusable middlewares
+//  Export reusable middlewares
 export const uploadSingle = (fieldName) => upload.single(fieldName); 
 export const uploadFields = (fields) => upload.fields(fields);       
 export const uploadAny = upload.any();                                

@@ -14,7 +14,7 @@ export const toggleFavorite = async (req, res) => {
       await ChatMeta.create({
         user: req.user.id,
         chat: chatId,
-        isFavorite: true,
+        isFavorite: false,
       });
     }
 

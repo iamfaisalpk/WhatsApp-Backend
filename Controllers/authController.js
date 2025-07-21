@@ -65,14 +65,12 @@ export const sendOtp = async (req, res) => {
       to: formattedPhone,
     });
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "OTP sent",
-        phone: formattedPhone,
-        sessionId,
-      });
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent",
+      phone: formattedPhone,
+      sessionId,
+    });
   } catch (err) {
     return res
       .status(500)
@@ -80,7 +78,7 @@ export const sendOtp = async (req, res) => {
   }
 };
 
-// VERIFY OTP 
+// VERIFY OTP
 export const verifyOtp = async (req, res) => {
   try {
     const { phone, otp, sessionId } = req.body;
@@ -99,13 +97,11 @@ export const verifyOtp = async (req, res) => {
         .json({ success: false, message: "OTP not found or expired" });
     }
 
-    //  Expired OTP
     if (new Date() > otpEntry.expiresAt) {
       await Otp.deleteOne({ phone: formattedPhone, sessionId });
       return res.status(400).json({ success: false, message: "OTP expired" });
     }
 
-    //  Too many wrong attempts
     if (otpEntry.attempts >= 3) {
       await Otp.deleteOne({ phone: formattedPhone, sessionId });
       return res.status(429).json({
@@ -118,7 +114,7 @@ export const verifyOtp = async (req, res) => {
     try {
       isMatch = await bcrypt.compare(otp.trim(), otpEntry.code);
     } catch (compareError) {
-      console.error(" OTP comparison failed:", compareError.message);
+      console.error("OTP comparison failed:", compareError.message);
     }
 
     if (!isMatch) {
@@ -131,10 +127,10 @@ export const verifyOtp = async (req, res) => {
       });
     }
 
-    //  Valid OTP
     await Otp.deleteOne({ phone: formattedPhone, sessionId });
 
     let user = await User.findOne({ phone: formattedPhone });
+    let isNewUser = false;
 
     if (!user) {
       user = await User.create({
@@ -144,6 +140,7 @@ export const verifyOtp = async (req, res) => {
         lastLogin: new Date(),
         refreshTokens: [],
       });
+      isNewUser = true;
     } else {
       user.isVerified = true;
       user.isOnline = true;
@@ -152,8 +149,6 @@ export const verifyOtp = async (req, res) => {
 
     //  Generate tokens
     const { accessToken, refreshToken } = generateTokens(user._id);
-
-    //  Keep last 10 refreshTokens only (optional)
     const cleanRefreshToken = refreshToken.trim();
     const existingTokens = (user.refreshTokens || []).map((t) => t.trim());
     const updatedTokens = [
@@ -162,6 +157,25 @@ export const verifyOtp = async (req, res) => {
 
     user.refreshTokens = updatedTokens;
     await user.save();
+
+    //  Auto-create one-to-one chats with existing users if new
+    if (isNewUser) {
+      const allUsers = await User.find({ _id: { $ne: user._id } });
+
+      for (const otherUser of allUsers) {
+        const existingChat = await Conversation.findOne({
+          isGroup: false,
+          members: { $all: [user._id, otherUser._id] },
+        });
+
+        if (!existingChat) {
+          await Conversation.create({
+            isGroup: false,
+            members: [user._id, otherUser._id],
+          });
+        }
+      }
+    }
 
     return res.status(200).json({
       success: true,

@@ -6,6 +6,8 @@ import Conversation from "./Models/Conversation.js";
 import dotenv from "dotenv";
 dotenv.config();
 
+export const userSocketMap = new Map();
+
 export function setupSocket(server, app) {
   const io = new SocketIOServer(server, {
     cors: {
@@ -37,12 +39,11 @@ export function setupSocket(server, app) {
     console.log(` Socket connected: ${socket.id} (User: ${userId})`);
     onlineUsers.set(userId, socket.id);
 
-    //  Mark user online
+
     User.findByIdAndUpdate(userId, { isOnline: true }).catch((err) =>
       console.error(" user-online error:", err.message)
     );
 
-    //  Notify others that this user is online
     socket.broadcast.emit("user-status", { userId, isOnline: true });
 
     socket.on("description-updated", async ({ chatId, description }) => {
@@ -272,22 +273,20 @@ export function setupSocket(server, app) {
         try {
           const message = await Message.findById(messageId);
           if (!message) {
-            console.log("❌ Message not found for reaction:", messageId);
+            console.log(" Message not found for reaction:", messageId);
             return;
           }
 
-          // Check if user already reacted with this emoji
           const existingReactionIndex = message.reactions.findIndex(
             (r) => r.user.toString() === reactUserId && r.emoji === emoji
           );
 
           let action;
           if (existingReactionIndex > -1) {
-            // Remove existing reaction
             message.reactions.splice(existingReactionIndex, 1);
             action = "remove";
             console.log(
-              `🔄 Removed reaction ${emoji} from message ${messageId} by user ${reactUserId}`
+              ` Removed reaction ${emoji} from message ${messageId} by user ${reactUserId}`
             );
           } else {
             // Add new reaction
@@ -322,7 +321,7 @@ export function setupSocket(server, app) {
             timestamp: new Date(),
           });
         } catch (err) {
-          console.error("❌ Reaction error:", err.message);
+          console.error(" Reaction error:", err.message);
         }
       }
     );
@@ -396,7 +395,7 @@ export function setupSocket(server, app) {
         console.log(`⚪️ User ${userId} marked offline`);
         socket.broadcast.emit("user-status", { userId, isOnline: false });
       } catch (err) {
-        console.error("❌ Disconnect update error:", err.message);
+        console.error(" Disconnect update error:", err.message);
       }
     });
   });

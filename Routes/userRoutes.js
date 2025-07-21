@@ -4,7 +4,9 @@ import {
     getUserById,
     blockUser,
     unblockUser,
-    getBlockedUsers
+    getBlockedUsers,
+    saveContact,
+    getSavedContacts
 } from "../Controllers/userController.js";
 import authMiddleware from "../Middlewares/authMiddleware.js";
 
@@ -15,5 +17,9 @@ router.get("/blocked/list", authMiddleware, getBlockedUsers);
 router.get("/:id", authMiddleware, getUserById);
 router.put("/block/:id", authMiddleware, blockUser);      
 router.put("/unblock/:id", authMiddleware, unblockUser);
+router.post("/save-contact", authMiddleware, saveContact);
+router.get("/contacts/list", authMiddleware, getSavedContacts);
+
+
 
 export default router;

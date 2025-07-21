@@ -19,7 +19,7 @@ export const searchUsers = async (req, res) => {
 
     const users = await User.find({
       ...keyword,
-      _id: { $ne: req.user._id }, 
+      _id: { $ne: req.user._id },
     }).select("name phone username profilePic isOnline");
 
     if (!users || users.length === 0) {
@@ -123,5 +123,70 @@ export const getBlockedUsers = async (req, res) => {
   } catch (err) {
     console.error("Error in getBlockedUsers:", err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const saveContact = async (req, res) => {
+  try {
+    const { phone, name } = req.body;
+
+    if (!phone || !name) {
+      return res.status(400).json({ message: "Phone and name are required." });
+    }
+
+    let contactUser = await User.findOne({ phone: phone.trim() });
+
+    if (!contactUser) {
+      contactUser = new User({
+        phone: phone.trim(),
+        name,
+        isVerified: false,
+      });
+      await contactUser.save();
+    }
+
+    const myUser = await User.findById(req.user.id);
+
+    const alreadyExists = myUser.contacts.some(
+      (c) => c.user.toString() === contactUser._id.toString()
+    );
+
+    if (alreadyExists) {
+      return res.status(400).json({ message: "User already in contacts." });
+    }
+
+    myUser.contacts.push({
+      user: contactUser._id,
+      savedName: name,
+    });
+
+    await myUser.save();
+
+    res
+      .status(200)
+      .json({ message: "Contact saved successfully.", contactUser });
+  } catch (err) {
+    console.error("Error in saveContact:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+// Get Saved Contacts List
+export const getSavedContacts = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate(
+      "contacts.user",
+      "name phone profilePic isOnline"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    res.status(200).json(user.contacts);
+  } catch (err) {
+    console.error("Error in getSavedContacts:", err);
+    res.status(500).json({ message: "Failed to fetch saved contacts." });
   }
 };

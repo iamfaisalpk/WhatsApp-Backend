@@ -3,7 +3,7 @@ import ChatMeta from "../Models/ChatMeta.js";
 import Message from "../Models/Message.js";
 import User from "../Models/User.js";
 import mongoose from "mongoose";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 
 export const accessChat = async (req, res) => {
   const { userId } = req.body;
@@ -143,7 +143,9 @@ export const fetchChats = async (req, res) => {
       members: req.user.id,
       hiddenFor: { $ne: req.user.id },
     })
-      .select("members isGroup groupName groupAvatar groupDescription lastMessage updatedAt createdAt groupAdmin inviteToken")
+      .select(
+        "members isGroup groupName groupAvatar groupDescription lastMessage updatedAt createdAt groupAdmin inviteToken"
+      )
       .populate(
         "members",
         "name profilePic isOnline lastSeen savedName phone isBlocked isBlockedByMe about"
@@ -202,7 +204,9 @@ export const fetchChats = async (req, res) => {
         return {
           ...chatObj,
           groupAvatar: chatObj.isGroup ? chatObj.groupAvatar || "" : undefined,
-          groupDescription: chatObj.isGroup ? chatObj.groupDescription || "" : undefined,
+          groupDescription: chatObj.isGroup
+            ? chatObj.groupDescription || ""
+            : undefined,
           isFavorite: meta?.isFavorite || false,
           isRead: meta?.isRead !== false,
           muted: meta?.muted || false,
@@ -239,7 +243,7 @@ export const createGroupChat = async (req, res) => {
   console.log(" [createGroupChat] called");
   console.log(" User:", req.user);
   console.log(" Body:", req.body);
-  console.log(" File received:", req.file); 
+  console.log(" File received:", req.file);
 
   let { members, groupName, groupDescription } = req.body;
   const groupAvatar = req.file?.path || "";
@@ -274,7 +278,7 @@ export const createGroupChat = async (req, res) => {
       groupDescription,
       members: allUsers,
       groupAdmin: req.user.id,
-      inviteToken: uuidv4(), 
+      inviteToken: uuidv4(),
     });
 
     const fullGroupChat = await Conversation.findById(groupChat._id)
@@ -315,75 +319,16 @@ export const renameGroup = async (req, res) => {
       return res.status(404).json({ message: "Chat not found" });
     }
 
+    const io = req.app.locals.io;
+    io.to(chatId).emit("group description updated", {
+      chatId,
+    });
+
     res.status(200).json({ success: true, updatedChat });
   } catch (error) {
     console.error("Rename Group Error:", error);
     res.status(500).json({
       message: "Failed to rename group",
-      error: error.message,
-    });
-  }
-};
-
-export const addToGroup = async (req, res) => {
-  const { chatId, userId } = req.body;
-
-  if (!chatId || !userId) {
-    return res
-      .status(400)
-      .json({ message: "Chat ID and user ID are required" });
-  }
-
-  try {
-    const updatedChat = await Conversation.findByIdAndUpdate(
-      chatId,
-      { $push: { members: userId } },
-      { new: true }
-    )
-      .populate("members", "name profilePic isOnline lastSeen about phone")
-      .populate("groupAdmin", "name profilePic about phone");
-
-    if (!updatedChat) {
-      return res.status(404).json({ message: "Chat not found" });
-    }
-
-    res.status(200).json({ success: true, updatedChat });
-  } catch (error) {
-    console.error(" Add to Group Error:", error);
-    res.status(500).json({
-      message: "Failed to add user",
-      error: error.message,
-    });
-  }
-};
-
-export const removeFromGroup = async (req, res) => {
-  const { chatId, userId } = req.body;
-
-  if (!chatId || !userId) {
-    return res
-      .status(400)
-      .json({ message: "Chat ID and user ID are required" });
-  }
-
-  try {
-    const updatedChat = await Conversation.findByIdAndUpdate(
-      chatId,
-      { $pull: { members: userId } },
-      { new: true }
-    )
-      .populate("members", "name profilePic isOnline lastSeen about phone")
-      .populate("groupAdmin", "name profilePic about phone");
-
-    if (!updatedChat) {
-      return res.status(404).json({ message: "Chat not found" });
-    }
-
-    res.status(200).json({ success: true, updatedChat });
-  } catch (error) {
-    console.error("Remove from Group Error:", error);
-    res.status(500).json({
-      message: "Failed to remove user",
       error: error.message,
     });
   }
@@ -425,13 +370,6 @@ export const deleteChat = async (req, res) => {
       });
     }
 
-    if (chat.isGroup && chat.groupAdmin.toString() !== req.user.id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Only group admin can delete this group chat",
-      });
-    }
-
     await ChatMeta.deleteMany({ chat: chatId, user: req.user.id });
     await Conversation.findByIdAndUpdate(chatId, {
       $addToSet: { hiddenFor: req.user.id },
@@ -451,38 +389,6 @@ export const deleteChat = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to delete chat",
-      error: error.message,
-    });
-  }
-};
-
-export const leaveGroup = async (req, res) => {
-  const { chatId } = req.body;
-
-  if (!chatId) {
-    return res.status(400).json({ message: "Chat ID is required" });
-  }
-
-  if (!req.user || !req.user.id) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  try {
-    const updatedChat = await Conversation.findByIdAndUpdate(
-      chatId,
-      { $pull: { members: req.user.id } },
-      { new: true }
-    );
-
-    if (!updatedChat) {
-      return res.status(404).json({ message: "Chat not found" });
-    }
-
-    res.status(200).json({ success: true, chat: updatedChat });
-  } catch (error) {
-    console.error("Leave Group Error:", error);
-    res.status(500).json({
-      message: "Failed to leave group",
       error: error.message,
     });
   }
@@ -560,7 +466,7 @@ export const toggleFavorite = async (req, res) => {
       meta = await ChatMeta.create({
         user: req.user.id,
         chat: chatId,
-        isFavorite: true,
+        isFavorite: false,
       });
     } else {
       meta.isFavorite = !meta.isFavorite;
@@ -773,6 +679,16 @@ export const joinGroupViaInvite = async (req, res) => {
       .populate("members", "name profilePic isOnline lastSeen about phone")
       .populate("groupAdmin", "name profilePic about phone");
 
+    const io = req.app.locals.io;
+
+    const onlineSocketId = [...io.sockets.sockets.values()].find(
+      (s) => s.userId === userId
+    )?.id;
+
+    if (onlineSocketId) {
+      io.to(onlineSocketId).emit("chat list updated", fullGroup);
+    }
+
     res.status(200).json({
       success: true,
       message: "Joined group successfully",
@@ -808,7 +724,7 @@ export const getGroupInfo = async (req, res) => {
     }
 
     // Check if user is a member
-    if (!chat.members.some(member => member._id.toString() === req.user.id)) {
+    if (!chat.members.some((member) => member._id.toString() === req.user.id)) {
       return res.status(403).json({
         success: false,
         message: "You are not a member of this group",
@@ -843,38 +759,34 @@ export const updateGroupDescription = async (req, res) => {
   const userId = req.user.id;
 
   if (!chatId || description === undefined) {
-    return res
-      .status(400)
-      .json({ 
-        success: false,
-        message: "chatId and description are required" 
-      });
+    return res.status(400).json({
+      success: false,
+      message: "chatId and description are required",
+    });
   }
 
   try {
     const chat = await Conversation.findById(chatId);
 
     if (!chat) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Group not found" 
+        message: "Group not found",
       });
     }
 
     if (!chat.isGroup) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Not a group chat" 
+        message: "Not a group chat",
       });
     }
 
     if (chat.groupAdmin.toString() !== userId) {
-      return res
-        .status(403)
-        .json({ 
-          success: false,
-          message: "Only admin can update description" 
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Only admin can update description",
+      });
     }
 
     chat.groupDescription = description.trim();
@@ -886,19 +798,6 @@ export const updateGroupDescription = async (req, res) => {
       .populate("members", "name profilePic isOnline lastSeen about phone")
       .populate("groupAdmin", "name profilePic about phone")
       .populate("groupDescriptionUpdatedBy", "name profilePic");
-
-    // Send real-time update to all members
-    const io = req.app.get("io");
-    if (io) {
-      chat.members.forEach((memberId) => {
-        io.to(memberId.toString()).emit("group description updated", {
-          chatId,
-          description: chat.groupDescription,
-          updatedAt: chat.groupDescriptionLastUpdated,
-          updatedBy: updatedChat.groupDescriptionUpdatedBy,
-        });
-      });
-    }
 
     return res.status(200).json({
       success: true,
@@ -915,7 +814,6 @@ export const updateGroupDescription = async (req, res) => {
   }
 };
 
-
 export const inviteGroupPreview = async (req, res) => {
   const { inviteToken } = req.params;
 
@@ -925,7 +823,9 @@ export const inviteGroupPreview = async (req, res) => {
       .populate("groupAdmin", "name profilePic");
 
     if (!group || !group.isGroup) {
-      return res.status(404).json({ message: "Group not found or invalid token" });
+      return res
+        .status(404)
+        .json({ message: "Group not found or invalid token" });
     }
 
     res.status(200).json({
@@ -935,5 +835,188 @@ export const inviteGroupPreview = async (req, res) => {
   } catch (err) {
     console.error("Invite preview error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+export const leaveGroup = async (req, res) => {
+  const { chatId } = req.body;
+
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const userId = req.user.id;
+
+  try {
+    const chat = await Conversation.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    if (!chat.isGroup) {
+      return res.status(400).json({ message: "This is not a group chat" });
+    }
+
+    if (!chat.members.includes(userId)) {
+      return res.status(400).json({ message: "You are not a member" });
+    }
+
+    let updatedChat = await Conversation.findByIdAndUpdate(
+      chatId,
+      { $pull: { members: userId } },
+      { new: true }
+    );
+
+    if (!updatedChat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    updatedChat = await updatedChat.populate(
+      "members",
+      "-password -refreshToken"
+    );
+
+    const io = req.app.locals.io;
+
+    io.to(chatId).emit("left-group", {
+      chatId,
+      userId,
+    });
+
+    res.status(200).json({ success: true, chat: updatedChat });
+  } catch (error) {
+    console.error("Leave Group Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to leave group",
+      error: error.message,
+    });
+  }
+};
+
+export const addToGroup = async (req, res) => {
+  const { chatId, userId } = req.body;
+
+  if (!chatId || !userId) {
+    return res
+      .status(400)
+      .json({ message: "Chat ID and user ID are required" });
+  }
+
+  try {
+    const chat = await Conversation.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    if (!chat.isGroup) {
+      return res.status(400).json({ message: "This is not a group chat" });
+    }
+
+    if (chat.members.includes(userId)) {
+      return res.status(400).json({ message: "User is already a member" });
+    }
+
+    const updatedChat = await Conversation.findByIdAndUpdate(
+      chatId,
+      { $push: { members: userId } },
+      { new: true }
+    )
+      .populate("members", "name profilePic isOnline lastSeen about phone")
+      .populate("groupAdmin", "name profilePic about phone");
+
+    if (!updatedChat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    const io = req.app.locals.io;
+
+    io.to(chatId).emit("user-added-to-group", {
+      chatId,
+      userId,
+      updatedChat,
+    });
+
+    const onlineSocketId = [...io.sockets.sockets.values()].find(
+      (s) => s.userId === userId
+    )?.id;
+
+    if (onlineSocketId) {
+      io.to(onlineSocketId).emit("chat list updated", updatedChat);
+    }
+
+    res.status(200).json({ success: true, updatedChat });
+  } catch (error) {
+    console.error("Add to Group Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to add user",
+      error: error.message,
+    });
+  }
+};
+
+export const removeFromGroup = async (req, res) => {
+  const { chatId, userId } = req.body;
+
+  if (!chatId || !userId) {
+    return res
+      .status(400)
+      .json({ message: "Chat ID and user ID are required" });
+  }
+
+  try {
+    const chat = await Conversation.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    if (!chat.isGroup) {
+      return res.status(400).json({ message: "This is not a group chat" });
+    }
+
+    if (!chat.members.includes(userId)) {
+      return res.status(400).json({ message: "User is not a member" });
+    }
+
+    const updatedChat = await Conversation.findByIdAndUpdate(
+      chatId,
+      { $pull: { members: userId } },
+      { new: true }
+    )
+      .populate("members", "name profilePic isOnline lastSeen about phone")
+      .populate("groupAdmin", "name profilePic about phone");
+
+    if (!updatedChat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    const io = req.app.locals.io;
+
+    io.to(chatId).emit("user-removed-from-group", {
+      chatId,
+      userId,
+    });
+
+    const removedSocketId = [...io.sockets.sockets.values()].find(
+      (s) => s.userId === userId
+    )?.id;
+
+    if (removedSocketId) {
+      io.to(removedSocketId).emit("chat list updated", updatedChat);
+    }
+
+    res.status(200).json({ success: true, updatedChat });
+  } catch (error) {
+    console.error("Remove from Group Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to remove user",
+      error: error.message,
+    });
   }
 };

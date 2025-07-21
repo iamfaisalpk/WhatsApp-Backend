@@ -12,7 +12,7 @@ export const uploadToCloudinary = async (file, folder = "chats") => {
         },
         (error, result) => {
           if (error) {
-            console.error("❌ Cloudinary buffer upload error:", error);
+            console.error(" Cloudinary buffer upload error:", error);
             reject(error);
           } else {
             resolve(result);
@@ -23,7 +23,6 @@ export const uploadToCloudinary = async (file, folder = "chats") => {
       streamifier.createReadStream(file.buffer).pipe(stream);
     }
 
-    // 📂 Upload using local file path (Multer diskStorage)
     else if (file?.path) {
       cloudinary.uploader
         .upload(file.path, {
@@ -36,19 +35,18 @@ export const uploadToCloudinary = async (file, folder = "chats") => {
               fs.unlinkSync(file.path); 
             }
           } catch (err) {
-            console.warn("⚠️ Could not delete file:", err.message);
+            console.warn(" Could not delete file:", err.message);
           }
           resolve(result);
         })
         .catch((error) => {
-          console.error("❌ Cloudinary path upload error:", error);
+          console.error(" Cloudinary path upload error:", error);
           reject(error);
         });
     }
 
-    // ❌ No valid file found
     else {
-      reject(new Error("❌ No file.buffer or file.path found for upload."));
+      reject(new Error(" No file.buffer or file.path found for upload."));
     }
   });
 };
