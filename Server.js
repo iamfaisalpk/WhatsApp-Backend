@@ -14,7 +14,7 @@ import communityRoutes from "./Routes/communityRoutes.js";
 import chatRoutes from "./Routes/chatRoutes.js";
 import userRoutes from "./Routes/userRoutes.js";
 import chatMetaRoutes from "./Routes/chatMetaRoutes.js";
-import tokenRoutes from './Routes/tokenRoutes.js'
+import tokenRoutes from "./Routes/tokenRoutes.js";
 import errorHandler from "./Middlewares/errorHandler.js";
 import { setupSocket } from "./Socket.js";
 
@@ -26,15 +26,16 @@ connectDB();
 
 // Middlewares
 app.use(express.json({ limit: "10mb" }));
-app.use(cors({
-  origin: [process.env.CLIENT_URL],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: [process.env.CLIENT_URL],
+    credentials: true,
+  })
+);
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
-
 
 // Test Route
 app.get("/api/test", (req, res) => {
@@ -45,19 +46,31 @@ app.get("/api/test", (req, res) => {
   });
 });
 
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", process.env.CLIENT_URL);
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200); 
+  }
+
+  next();
+});
 
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/community", communityRoutes);
-app.use("/api/chat",chatRoutes);
-app.use("/api/users",userRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/chat-meta", chatMetaRoutes);
-app.use("/api/token",tokenRoutes)
-
-
+app.use("/api/token", tokenRoutes);
 
 app.use(errorHandler);
 
@@ -67,10 +80,10 @@ setupSocket(server, app);
 server.timeout = 120000;
 
 // Server Listen
-const PORT = process.env.PORT
+const PORT = process.env.PORT;
 
 server.listen(PORT, () => {
-    console.log(`\n Server running on http://localhost:${PORT}`);
-    console.log(` Environment: ${process.env.NODE_ENV || "production"}`);
-    console.log(` Test API: http://localhost:${PORT}/api/test`);
+  console.log(`\n Server running on http://localhost:${PORT}`);
+  console.log(` Environment: ${process.env.NODE_ENV || "production"}`);
+  console.log(` Test API: http://localhost:${PORT}/api/test`);
 });
