@@ -42,7 +42,6 @@ const conversationSchema = new mongoose.Schema(
 
     inviteToken: {
       type: String,
-      unique: true,
       required: true,
       default: () => crypto.randomUUID(),
     },
