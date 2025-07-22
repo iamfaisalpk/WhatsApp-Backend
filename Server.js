@@ -56,7 +56,6 @@ app.use("/api/token",tokenRoutes)
 
 
 
-
 app.use(errorHandler);
 
 // Socket.io setup
