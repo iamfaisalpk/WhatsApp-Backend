@@ -45,6 +45,8 @@ app.get("/api/test", (req, res) => {
   });
 });
 
+
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
