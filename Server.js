@@ -27,17 +27,13 @@ connectDB();
 // Middlewares
 app.use(express.json({ limit: "10mb" }));
 app.use(cors({
-  origin: process.env.CLIENT_URL,
+  origin: [process.env.CLIENT_URL],
   credentials: true,
 }));
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
-
-app.get("/", (req, res) => {
-  res.send(" WhatsApp Clone Backend is Live!");
-});
 
 
 // Test Route
