@@ -27,8 +27,10 @@ connectDB();
 // Middlewares
 app.use(express.json({ limit: "10mb" }));
 app.use(cors({
-  origin: [process.env.CLIENT_URL],
+  origin: process.env.CLIENT_URL || "https://whats-app-frontend-foqf7bzf1-faisals-projects-cd7c20ca.vercel.app",
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 }));
 
 if (process.env.NODE_ENV === "development") {
@@ -60,6 +62,13 @@ app.use("/api/chat-meta", chatMetaRoutes);
 app.use("/api/token",tokenRoutes)
 
 
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});a
 
 app.use(errorHandler);
 
