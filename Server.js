@@ -25,21 +25,19 @@ connectDB();
 // Middlewares
 app.use(express.json({ limit: "10mb" }));
 
-// Enhanced CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
     const allowedOrigins = [
       process.env.CLIENT_URL,
-      'https://whats-app-frontend-nu.vercel.app', // Current frontend URL
-      'https://whats-app-frontend-foqf7bzf1-faisals-projects-cd7c20ca.vercel.app', // Previous URL
-      'http://localhost:3000', // for local development
-      'http://localhost:5173', // for Vite dev server
+      'https://whats-app-frontend-nu.vercel.app',
+      'https://whats-app-frontend-foqf7bzf1-faisals-projects-cd7c20ca.vercel.app', 
+      'http://localhost:5000',
+      'http://localhost:5173', 
       'http://127.0.0.1:3000',
       'http://127.0.0.1:5173'
-    ].filter(Boolean); // Remove any undefined values
+    ].filter(Boolean);
     
     // Allow any Vercel preview deployment for this project
     const isVercelPreview = origin && origin.match(/^https:\/\/whats-app-frontend-.*\.vercel\.app$/);
@@ -73,12 +71,11 @@ const corsOptions = {
     'X-Access-Token'
   ],
   exposedHeaders: ['Authorization'],
-  maxAge: 86400 // Cache preflight response for 24 hours
+  maxAge: 86400 
 };
 
 app.use(cors(corsOptions));
 
-// Additional CORS handling for preflight requests
 app.options('*', cors(corsOptions));
 
 if (process.env.NODE_ENV === "development") {
