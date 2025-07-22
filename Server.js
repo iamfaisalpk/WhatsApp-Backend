@@ -35,6 +35,11 @@ if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
+app.get("/", (req, res) => {
+  res.send(" WhatsApp Clone Backend is Live!");
+});
+
+
 // Test Route
 app.get("/api/test", (req, res) => {
   res.status(200).json({
