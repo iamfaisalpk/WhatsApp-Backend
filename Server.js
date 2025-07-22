@@ -33,12 +33,23 @@ const corsOptions = {
     
     const allowedOrigins = [
       process.env.CLIENT_URL,
-      'https://whats-app-frontend-foqf7bzf1-faisals-projects-cd7c20ca.vercel.app',
+      'https://whats-app-frontend-nu.vercel.app', // Current frontend URL
+      'https://whats-app-frontend-foqf7bzf1-faisals-projects-cd7c20ca.vercel.app', // Previous URL
       'http://localhost:3000', // for local development
       'http://localhost:5173', // for Vite dev server
       'http://127.0.0.1:3000',
       'http://127.0.0.1:5173'
     ].filter(Boolean); // Remove any undefined values
+    
+    // Allow any Vercel preview deployment for this project
+    const isVercelPreview = origin && origin.match(/^https:\/\/whats-app-frontend-.*\.vercel\.app$/);
+    
+    if (allowedOrigins.includes(origin) || isVercelPreview) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
     
     console.log('Request origin:', origin);
     console.log('Allowed origins:', allowedOrigins);
