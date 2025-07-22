@@ -43,7 +43,7 @@ const profileAvatarStorage = new CloudinaryStorage({
 
 //  General file filter
 const generalFileFilter = (req, file, cb) => {
-  console.log("📎 Uploading file:", file.originalname, "| Type:", file.mimetype);
+  console.log(" Uploading file:", file.originalname, "| Type:", file.mimetype);
   
   const allowedMimeTypes = [
     // Images
@@ -57,14 +57,14 @@ const generalFileFilter = (req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    console.warn("❌ Rejected file type:", file.mimetype);
+    console.warn(" Rejected file type:", file.mimetype);
     cb(new Error(`File type not allowed: ${file.mimetype}`));
   }
 };
 
 //  Group Avatar specific file filter
 const groupAvatarFileFilter = (req, file, cb) => {
-  console.log("📎 Uploading group avatar:", file.originalname, "| Type:", file.mimetype);
+  console.log(" Uploading group avatar:", file.originalname, "| Type:", file.mimetype);
   
   const allowedMimeTypes = [
     "image/jpeg", "image/jpg", "image/png", "image/webp"
@@ -73,14 +73,14 @@ const groupAvatarFileFilter = (req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    console.warn("❌ Rejected file type for group avatar:", file.mimetype);
+    console.warn(" Rejected file type for group avatar:", file.mimetype);
     cb(new Error(`Only image files are allowed for group avatars. Received: ${file.mimetype}`));
   }
 };
 
 //  Profile Avatar specific file filter
 const profileAvatarFileFilter = (req, file, cb) => {
-  console.log("📎 Uploading profile avatar:", file.originalname, "| Type:", file.mimetype);
+  console.log(" Uploading profile avatar:", file.originalname, "| Type:", file.mimetype);
   
   const allowedMimeTypes = [
     "image/jpeg", "image/jpg", "image/png", "image/webp"
@@ -89,7 +89,7 @@ const profileAvatarFileFilter = (req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    console.warn("❌ Rejected file type for profile avatar:", file.mimetype);
+    console.warn(" Rejected file type for profile avatar:", file.mimetype);
     cb(new Error(`Only image files are allowed for profile avatars. Received: ${file.mimetype}`));
   }
 };

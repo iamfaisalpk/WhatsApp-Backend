@@ -29,7 +29,7 @@ export const refreshAccessToken = async (req, res) => {
     try {
       decoded = jwt.verify(cleanRefreshToken, process.env.JWT_REFRESH_SECRET);
     } catch (jwtError) {
-      console.error("🚨 JWT verification failed:", jwtError.message);
+      console.error(" JWT verification failed:", jwtError.message);
       return res.status(401).json({
         success: false,
         message: "Invalid or expired refresh token",
@@ -64,12 +64,12 @@ export const refreshAccessToken = async (req, res) => {
     }
 
     // 🔍 Enhanced debugging logs
-    console.log("🔑 Incoming refreshToken:", cleanRefreshToken);
-    console.log("🗃️ Stored tokens count:", user.refreshTokens?.length || 0);
+    console.log(" Incoming refreshToken:", cleanRefreshToken);
+    console.log(" Stored tokens count:", user.refreshTokens?.length || 0);
 
     // Ensure refreshTokens array exists
     if (!Array.isArray(user.refreshTokens)) {
-      console.warn("⚠️ refreshTokens not an array, initializing...");
+      console.warn(" refreshTokens not an array, initializing...");
       user.refreshTokens = [];
     }
 
@@ -77,7 +77,7 @@ export const refreshAccessToken = async (req, res) => {
     const cleanStoredTokens = user.refreshTokens.map((token) => token.trim());
     const tokenMatch = cleanStoredTokens.includes(cleanRefreshToken);
 
-    console.log("✅ Token match found:", tokenMatch);
+    console.log(" Token match found:", tokenMatch);
 
     if (!tokenMatch) {
       console.error("🚫 Refresh token not found in user's stored tokens");
@@ -101,7 +101,7 @@ export const refreshAccessToken = async (req, res) => {
     try {
       await user.save();
     } catch (saveError) {
-      console.error("🚨 Failed to save user:", saveError.message);
+      console.error(" Failed to save user:", saveError.message);
       return res.status(500).json({
         success: false,
         message: "Failed to update user tokens",
@@ -109,7 +109,7 @@ export const refreshAccessToken = async (req, res) => {
       });
     }
 
-    console.log("✅ Token refresh successful for user:", user._id);
+    console.log(" Token refresh successful for user:", user._id);
 
     return res.status(200).json({
       success: true,
@@ -118,8 +118,8 @@ export const refreshAccessToken = async (req, res) => {
       message: "Tokens refreshed successfully",
     });
   } catch (err) {
-    console.error("🚨 Refresh token failed:", err.message);
-    console.error("🚨 Stack trace:", err.stack);
+    console.error(" Refresh token failed:", err.message);
+    console.error(" Stack trace:", err.stack);
 
     return res.status(401).json({
       success: false,
@@ -197,7 +197,7 @@ export const logoutAllDevices = async (req, res) => {
   }
 };
 
-// 🔧 Utility function to clean up expired refresh tokens
+//  Utility function to clean up expired refresh tokens
 export const cleanupExpiredTokens = async (userId) => {
   try {
     const user = await User.findById(userId);
@@ -210,7 +210,7 @@ export const cleanupExpiredTokens = async (userId) => {
         jwt.verify(token, process.env.JWT_REFRESH_SECRET);
         validTokens.push(token);
       } catch (error) {
-        console.log("🗑️ Removing expired token");
+        console.log(" Removing expired token");
       }
     }
 
@@ -218,7 +218,7 @@ export const cleanupExpiredTokens = async (userId) => {
       user.refreshTokens = validTokens;
       await user.save();
       console.log(
-        `🧹 Cleaned up ${
+        ` Cleaned up ${
           user.refreshTokens.length - validTokens.length
         } expired tokens`
       );

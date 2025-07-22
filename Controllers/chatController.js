@@ -65,7 +65,7 @@ export const accessChat = async (req, res) => {
           (id) => id.toString() !== currentUserId.toString()
         );
         await chat.save();
-        console.log("👁️ Chat unhidden for current user");
+        console.log(" Chat unhidden for current user");
       }
 
       chat = await Conversation.findById(chat._id).populate(
@@ -108,7 +108,7 @@ export const accessChat = async (req, res) => {
       [currentUserId, userId].map((id) =>
         ChatMeta.findOneAndUpdate(
           { user: id, chat: newChat._id },
-          { $setOnInsert: { isRead: true } },
+          { $setOnInsert: { isRead: true , isFavorite: false} },
           { upsert: true, new: true }
         )
       )
@@ -207,7 +207,7 @@ export const fetchChats = async (req, res) => {
           groupDescription: chatObj.isGroup
             ? chatObj.groupDescription || ""
             : undefined,
-          isFavorite: meta?.isFavorite || false,
+          isFavorite: meta?.isFavorite === true,
           isRead: meta?.isRead !== false,
           muted: meta?.muted || false,
           archived: meta?.archived || false,
@@ -447,15 +447,13 @@ export const getSharedGroups = async (req, res) => {
 
 export const toggleFavorite = async (req, res) => {
   const { chatId } = req.params;
-
+  console.log("what is issuefor toogle",chatId)
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required" });
   }
-
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-
   try {
     let meta = await ChatMeta.findOne({
       user: req.user.id,
@@ -466,7 +464,7 @@ export const toggleFavorite = async (req, res) => {
       meta = await ChatMeta.create({
         user: req.user.id,
         chat: chatId,
-        isFavorite: false,
+        isFavorite: false, 
       });
     } else {
       meta.isFavorite = !meta.isFavorite;
@@ -479,7 +477,7 @@ export const toggleFavorite = async (req, res) => {
       isFavorite: meta.isFavorite,
     });
   } catch (error) {
-    console.error(" Toggle Favorite Error:", error);
+    console.error("Toggle Favorite Error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to update favorite status",

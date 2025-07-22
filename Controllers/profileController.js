@@ -29,7 +29,7 @@ export const getMyProfile = async (req, res) => {
 
 export const updateMyProfile = async (req, res) => {
   try {
-    console.log("📥 Profile update request for user:", req.user.id);
+    console.log(" Profile update request for user:", req.user.id);
 
     const user = await User.findById(req.user.id);
     if (!user) {
@@ -39,7 +39,7 @@ export const updateMyProfile = async (req, res) => {
     const { name, about } = req.body;
     let profilePic;
 
-    // 👇 Find file if it exists
+    //  Find file if it exists
     if (req.files && req.files.length > 0) {
       const picFile = req.files.find((file) => file.fieldname === "profilePic");
       if (picFile) {

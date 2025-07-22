@@ -222,7 +222,7 @@ export function setupSocket(server, app) {
         // Find all unseen messages from other users
         const unseenMessages = await Message.find({
           conversationId,
-          sender: { $ne: userId }, // Not sent by current user
+          sender: { $ne: userId },
           $or: [
             { seenBy: { $exists: false } },
             { seenBy: { $not: { $elemMatch: { $eq: userId } } } },
@@ -297,7 +297,7 @@ export function setupSocket(server, app) {
             });
             action = "add";
             console.log(
-              `✅ Added reaction ${emoji} to message ${messageId} by user ${reactUserId}`
+              ` Added reaction ${emoji} to message ${messageId} by user ${reactUserId}`
             );
           }
 
@@ -383,7 +383,7 @@ export function setupSocket(server, app) {
 
     //  Disconnect
     socket.on("disconnect", async () => {
-      console.log(`🔌 Socket disconnected: ${socket.id}`);
+      console.log(` Socket disconnected: ${socket.id}`);
       onlineUsers.delete(userId);
 
       try {
@@ -392,7 +392,7 @@ export function setupSocket(server, app) {
           lastSeen: new Date(),
         });
 
-        console.log(`⚪️ User ${userId} marked offline`);
+        console.log(` User ${userId} marked offline`);
         socket.broadcast.emit("user-status", { userId, isOnline: false });
       } catch (err) {
         console.error(" Disconnect update error:", err.message);
