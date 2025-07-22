@@ -26,10 +26,23 @@ connectDB();
 
 // Middlewares
 app.use(express.json({ limit: "10mb" }));
+
+// CORS Configuration - UPDATED
 app.use(cors({
-  origin: [process.env.CLIENT_URL],
+  origin: [
+    'https://whats-app-frontend-nu.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    process.env.CLIENT_URL
+  ].filter(Boolean),
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
@@ -38,7 +51,6 @@ if (process.env.NODE_ENV === "development") {
 app.get("/", (req, res) => {
   res.send(" WhatsApp Clone Backend is Live!");
 });
-
 
 // Test Route
 app.get("/api/test", (req, res) => {
@@ -54,12 +66,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/community", communityRoutes);
-app.use("/api/chat",chatRoutes);
-app.use("/api/users",userRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/chat-meta", chatMetaRoutes);
-app.use("/api/token",tokenRoutes)
-
-
+app.use("/api/token", tokenRoutes);
 
 app.use(errorHandler);
 
@@ -69,10 +79,11 @@ setupSocket(server, app);
 server.timeout = 120000;
 
 // Server Listen
-const PORT = process.env.PORT
+const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
-    console.log(`\n Server running on http://localhost:${PORT}`);
+    console.log(`\n Server running on port ${PORT}`);
     console.log(` Environment: ${process.env.NODE_ENV || "production"}`);
-    console.log(` Test API: http://localhost:${PORT}/api/test`);
+    console.log(` Frontend URL: ${process.env.CLIENT_URL}`);
+    console.log(` Test API: https://whatsapp-backend-app.onrender.com/api/test`);
 });
