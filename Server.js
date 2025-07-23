@@ -28,10 +28,20 @@ connectDB();
 app.use(express.json({ limit: "10mb" }));
 app.use(
   cors({
-    origin: [process.env.CLIENT_URL],
+    origin: function (origin, callback) {
+      const allowedOrigins = [process.env.CLIENT_URL];
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
@@ -45,8 +55,6 @@ app.get("/api/test", (req, res) => {
     time: new Date().toISOString(),
   });
 });
-
-
 
 // Routes
 app.use("/api/auth", authRoutes);
