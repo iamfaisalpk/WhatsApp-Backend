@@ -56,6 +56,11 @@ app.get("/api/test", (req, res) => {
   });
 });
 
+app.get("/", (req, res) => {
+  res.send("Backend is live!");
+});
+
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
