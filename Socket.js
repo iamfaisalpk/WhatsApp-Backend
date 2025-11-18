@@ -39,7 +39,6 @@ export function setupSocket(server, app) {
     console.log(` Socket connected: ${socket.id} (User: ${userId})`);
     onlineUsers.set(userId, socket.id);
 
-
     User.findByIdAndUpdate(userId, { isOnline: true }).catch((err) =>
       console.error(" user-online error:", err.message)
     );
@@ -97,86 +96,6 @@ export function setupSocket(server, app) {
         } catch (err) {
           console.error(" Delivery update error:", err.message);
         }
-      }
-    });
-
-    socket.on("new-message", async (data) => {
-      const { conversationId, text, media, voiceNote, replyTo, tempId } = data;
-      try {
-        const newMessage = await Message.create({
-          conversationId,
-          sender: userId,
-          text,
-          media,
-          voiceNote,
-          replyTo,
-        });
-
-        const populatedMsg = await Message.findById(newMessage._id)
-          .populate("sender", "name profilePic")
-          .populate({
-            path: "replyTo",
-            populate: {
-              path: "sender",
-              select: "name profilePic _id",
-            },
-          })
-          .populate("reactions.user", "name profilePic");
-
-        await Conversation.findByIdAndUpdate(conversationId, {
-          lastMessage: {
-            text:
-              populatedMsg.text ||
-              (populatedMsg.voiceNote?.url
-                ? "🎤 Voice"
-                : populatedMsg.media
-                ? "📎 Media"
-                : ""),
-            sender: populatedMsg.sender,
-            timestamp: populatedMsg.createdAt,
-          },
-        });
-
-        io.to(conversationId).emit("message received", {
-          ...populatedMsg.toObject(),
-          tempId,
-        });
-
-        const updatedConversation = await Conversation.findById(conversationId)
-          .populate("participants", "name profilePic phone")
-          .populate("lastMessage.sender", "name profilePic");
-
-        updatedConversation.participants.forEach((participant) => {
-          const socketId = onlineUsers.get(participant._id.toString());
-          if (socketId) {
-            io.to(socketId).emit("chat updated", updatedConversation);
-          }
-        });
-
-        //  Get all active users in the conversation
-        const conversation = await Conversation.findById(
-          conversationId
-        ).populate("participants", "_id");
-        const otherUserIds = conversation.participants
-          .map((u) => u._id.toString())
-          .filter((id) => id !== userId);
-
-        // Update `deliveredTo` for those who are online
-        const deliveredTo = otherUserIds.filter((uid) => onlineUsers.has(uid));
-        if (deliveredTo.length > 0) {
-          await Message.findByIdAndUpdate(populatedMsg._id, {
-            $addToSet: { deliveredTo: { $each: deliveredTo } },
-          });
-
-          io.to(conversationId).emit("delivery-update", {
-            messageIds: [populatedMsg._id.toString()],
-            deliveredTo,
-          });
-        }
-
-        console.log(` Message delivered & sent in ${conversationId}`);
-      } catch (err) {
-        console.error(" Message send error:", err.message);
       }
     });
 
