@@ -37,11 +37,10 @@ app.use(
       }
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
@@ -59,7 +58,6 @@ app.get("/api/test", (req, res) => {
 app.get("/", (req, res) => {
   res.send("Backend is live!");
 });
-
 
 // Routes
 app.use("/api/auth", authRoutes);
