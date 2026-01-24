@@ -2,6 +2,7 @@ import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 import streamifier from "streamifier";
 
+
 export const uploadToCloudinary = async (file, folder = "chats") => {
   return new Promise((resolve, reject) => {
     if (file?.buffer) {
