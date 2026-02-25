@@ -4,6 +4,7 @@ dotenv.config();
 import client from "../config/twilioClient.js";
 import User from "../Models/User.js";
 import Otp from "../Models/Otp.js";
+import Conversation from "../Models/Conversation.js";
 import bcrypt from "bcryptjs";
 import { generateTokens } from "../Utils/jwtUtils.js";
 import { v4 as uuidv4 } from "uuid";
@@ -15,10 +16,14 @@ const generateOTP = () =>
 
 const formatPhoneNumber = (rawPhone) => {
   let phone = rawPhone.trim();
-  if (phone.startsWith("+91") && phone.length === 13) return phone;
-  phone = phone.replace(/^in/, "").replace(/\D/g, "");
-  if (!phone.startsWith("91")) phone = "91" + phone;
-  return "+" + phone;
+  // If it already starts with +, trust it
+  if (phone.startsWith("+")) return phone;
+  
+  // Default legacy logic for handling numbers without +
+  phone = phone.replace(/\D/g, "");
+  if (phone.length === 10) return "+91" + phone;
+  if (!phone.startsWith("+")) return "+" + phone;
+  return phone;
 };
 
 //  SEND OTP
@@ -46,35 +51,21 @@ export const sendOtp = async (req, res) => {
     });
     await newOtp.save();
 
-    if (
-      process.env.NODE_ENV === "development" ||
-      TEST_NUMBERS.includes(formattedPhone)
-    ) {
-      return res.status(200).json({
-        success: true,
-        message: "OTP (dev mode)",
-        phone: formattedPhone,
-        otp,
-        sessionId,
-      });
-    }
-
-    await client.messages.create({
-      body: `Your WhatsApp code is: ${otp}`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: formattedPhone,
-    });
-
+    // For development, we return the OTP in the response to bypass real SMS
     return res.status(200).json({
       success: true,
-      message: "OTP sent",
+      message: "Test mode: OTP generated successfully",
       phone: formattedPhone,
+      otp, // Returning OTP directly for testing
       sessionId,
     });
   } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "OTP send failed", error: err.message });
+    console.error("OTP send error:", err);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal server error during OTP generation", 
+      error: err.message 
+    });
   }
 };
 
@@ -129,7 +120,7 @@ export const verifyOtp = async (req, res) => {
 
     await Otp.deleteOne({ phone: formattedPhone, sessionId });
 
-    let user = await User.findOne({ phone: formattedPhone });
+    let user = await User.findOne({ phone: formattedPhone }).select("+refreshTokens");
     let isNewUser = false;
 
     if (!user) {

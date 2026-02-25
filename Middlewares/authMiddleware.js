@@ -85,11 +85,14 @@ const authMiddleware = async (req, res, next) => {
 
     req.user = {
       id: user._id.toString(),
+      _id: user._id, 
       phone: user.phone,
       name: user.name || null,
       profilePic: user.profilePic || null,
       isVerified: user.isVerified,
       isOnline: user.isOnline,
+      blockedUsers: user.blockedUsers || [],
+      blockedBy: user.blockedBy || [],
     };
 
     console.log(' Auth successful, user object set for:', req.user.phone);

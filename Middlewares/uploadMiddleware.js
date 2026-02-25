@@ -25,13 +25,17 @@ const storage = new CloudinaryStorage({
       resource_type: "auto", 
       allowed_formats: [
         "jpg", "jpeg", "png", "webp",
-        "mp4", "webm", "mov",
+        "mp4", "webm", "mov", "avi", "mkv",
         "mp3", "wav", "ogg", "m4a", "webm",
         "pdf"
       ],
       transformation: isImage
         ? [{ width: 500, height: 500, crop: "limit" }] 
-        : [],
+        : isVideo
+          ? [{ quality: "auto:good" }]
+          : [],
+      // For large video uploads, use chunked upload
+      ...(isVideo && { chunk_size: 6000000 }), // 6MB chunks
     };
   },
 });
@@ -58,7 +62,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, 
+    fileSize: 500 * 1024 * 1024, // 500MB max for video support
   },
   fileFilter,
 });

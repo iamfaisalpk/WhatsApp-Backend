@@ -124,6 +124,7 @@ export const sendMessage = async (req, res) => {
       req.app.locals.io.to(member._id.toString()).emit("conversation-updated", {
         conversationId: conversationId,
         lastMessage: {
+          _id: newMessage._id,
           text: updatedConversation.lastMessage.text,
           sender: senderId,
           timestamp: newMessage.createdAt,
@@ -161,7 +162,7 @@ export const getMessages = async (req, res) => {
           select: "name profilePic _id",
         },
       })
-
+      .populate("reactions.user", "name profilePic")
       .sort({ createdAt: 1 });
 
     res.status(200).json({ messages });
@@ -295,7 +296,8 @@ export const deleteMessage = async (req, res) => {
       .to(message.conversationId.toString())
       .emit("message-deleted", {
         messageId: message._id,
-        deletedForEveryone: true,
+        conversationId: message.conversationId,
+        deleteForEveryone: true,
       });
 
     res
@@ -379,5 +381,31 @@ export const reactToMessage = async (req, res) => {
   } catch (error) {
     console.error("React error:", error.message);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const getSharedMedia = async (req, res) => {
+  const { conversationId } = req.params;
+  try {
+    const messages = await Message.find({
+      conversationId,
+      "media.url": { $ne: null },
+      deletedForEveryone: { $ne: true },
+      deletedFor: { $ne: req.user.id }
+    })
+    .sort({ createdAt: -1 })
+    .select("media createdAt");
+    
+    const media = messages.map(m => ({
+      _id: m._id,
+      url: m.media.url,
+      type: m.media.type,
+      createdAt: m.createdAt
+    }));
+    
+    res.status(200).json({ success: true, media });
+  } catch (error) {
+    console.error("Shared media error:", error);
+    res.status(500).json({ success: false, message: "Error fetching shared media" });
   }
 };

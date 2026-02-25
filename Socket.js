@@ -11,7 +11,13 @@ export const userSocketMap = new Map();
 export function setupSocket(server, app) {
   const io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.CLIENT_URL,
+      origin: [
+        process.env.CLIENT_URL,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+      ],
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -38,6 +44,11 @@ export function setupSocket(server, app) {
     const userId = socket.userId;
     console.log(` Socket connected: ${socket.id} (User: ${userId})`);
     onlineUsers.set(userId, socket.id);
+    userSocketMap.set(userId, socket.id);
+
+    // Join user's own room so they can receive user-specific events
+    // (e.g., conversation-updated emitted to member._id.toString())
+    socket.join(userId);
 
     User.findByIdAndUpdate(userId, { isOnline: true }).catch((err) =>
       console.error(" user-online error:", err.message)

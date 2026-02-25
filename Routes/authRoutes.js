@@ -26,18 +26,10 @@ router.get('/test', (req, res) => {
 });
 });
 
-//  OTP
-router.post('/send-otp', sendOtp);
-router.post('/verify-otp', verifyOtp);
+// OTP
+router.post('/send', sendOtp);
+router.post('/verify', verifyOtp);
 
-//  Refresh Token Login
-router.post('/refresh-token', refreshAccessToken);
-
-//  Logout (single device)
-router.post('/logout', logoutUser);
-
-//  Logout (all devices)
-router.post('/logout-all', authMiddleware, logoutAllDevices);
 
 // Development Routes
 if (process.env.NODE_ENV === 'development') {

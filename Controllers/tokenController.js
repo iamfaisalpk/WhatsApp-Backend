@@ -1,35 +1,20 @@
-import jwt from "jsonwebtoken";
+import { generateTokens, verifyRefreshToken } from "../Utils/jwtUtils.js";
 import User from "../Models/User.js";
-
-export const generateAccessToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "15m" });
-};
-
-// Generate Refresh Token (7 days expiry)
-export const generateRefreshToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: "7d",
-  });
-};
 
 export const refreshAccessToken = async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Refresh token missing" });
+      return res.status(400).json({ success: false, message: "Refresh token missing" });
     }
 
-    // Trim whitespace to handle potential formatting issues
     const cleanRefreshToken = refreshToken.trim();
-
     let decoded;
+    
     try {
-      decoded = jwt.verify(cleanRefreshToken, process.env.JWT_REFRESH_SECRET);
+      decoded = verifyRefreshToken(cleanRefreshToken);
     } catch (jwtError) {
-      console.error(" JWT verification failed:", jwtError.message);
       return res.status(401).json({
         success: false,
         message: "Invalid or expired refresh token",
@@ -40,47 +25,10 @@ export const refreshAccessToken = async (req, res) => {
     const user = await User.findById(decoded.id).select("+refreshTokens");
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-        error: "USER_NOT_FOUND",
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    if (!user.isVerified) {
-      return res.status(403).json({
-        success: false,
-        message: "User account not verified",
-        error: "USER_NOT_VERIFIED",
-      });
-    }
-
-    if (user.isActive === false) {
-      return res.status(403).json({
-        success: false,
-        message: "User account is inactive",
-        error: "USER_INACTIVE",
-      });
-    }
-
-    // 🔍 Enhanced debugging logs
-    console.log(" Incoming refreshToken:", cleanRefreshToken);
-    console.log(" Stored tokens count:", user.refreshTokens?.length || 0);
-
-    // Ensure refreshTokens array exists
-    if (!Array.isArray(user.refreshTokens)) {
-      console.warn(" refreshTokens not an array, initializing...");
-      user.refreshTokens = [];
-    }
-
-    // Clean and compare tokens (handle potential whitespace issues)
-    const cleanStoredTokens = user.refreshTokens.map((token) => token.trim());
-    const tokenMatch = cleanStoredTokens.includes(cleanRefreshToken);
-
-    console.log(" Token match found:", tokenMatch);
-
-    if (!tokenMatch) {
-      console.error("🚫 Refresh token not found in user's stored tokens");
+    if (!user.refreshTokens || !user.refreshTokens.includes(cleanRefreshToken)) {
       return res.status(401).json({
         success: false,
         message: "Refresh token not recognized",
@@ -88,97 +36,70 @@ export const refreshAccessToken = async (req, res) => {
       });
     }
 
-    // Remove old token & issue new ones
-    user.refreshTokens = user.refreshTokens.filter(
-      (token) => token.trim() !== cleanRefreshToken
-    );
+    // Generate new pair
+    const tokens = generateTokens(user._id);
 
-    const newAccessToken = generateAccessToken(user._id);
-    const newRefreshToken = generateRefreshToken(user._id);
-
-    user.refreshTokens.push(newRefreshToken);
-
-    try {
-      await user.save();
-    } catch (saveError) {
-      console.error(" Failed to save user:", saveError.message);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to update user tokens",
-        error: "DATABASE_SAVE_ERROR",
-      });
+    // Replace old token with new one
+    user.refreshTokens = user.refreshTokens.filter(t => t !== cleanRefreshToken);
+    user.refreshTokens.push(tokens.refreshToken);
+    
+    // Keep max 5 tokens
+    if (user.refreshTokens.length > 5) {
+      user.refreshTokens.shift();
     }
 
-    console.log(" Token refresh successful for user:", user._id);
+    await user.save();
 
     return res.status(200).json({
       success: true,
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-      message: "Tokens refreshed successfully",
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        _id: user._id,
+        phone: user.phone,
+        name: user.name,
+        profilePic: user.profilePic
+      }
     });
   } catch (err) {
-    console.error(" Refresh token failed:", err.message);
-    console.error(" Stack trace:", err.stack);
-
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired refresh token",
-      error: "REFRESH_TOKEN_ERROR",
-    });
+    return res.status(500).json({ success: false, message: "Server error during token refresh" });
   }
 };
 
-// 🚪 Logout from Current Session
 export const logoutUser = async (req, res) => {
   try {
     const { refreshToken } = req.body;
     const userId = req.user.id;
 
     if (!refreshToken) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Refresh token required" });
+      return res.status(400).json({ success: false, message: "Refresh token required" });
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // Clean token before filtering
     const cleanRefreshToken = refreshToken.trim();
-    user.refreshTokens = user.refreshTokens.filter(
-      (token) => token.trim() !== cleanRefreshToken
-    );
+    user.refreshTokens = user.refreshTokens.filter((token) => token.trim() !== cleanRefreshToken);
 
     user.isOnline = false;
     user.lastSeen = new Date();
     await user.save();
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Logged out successfully" });
+    return res.status(200).json({ success: true, message: "Logged out successfully" });
   } catch (err) {
-    console.error("Logout error:", err.message);
-    return res
-      .status(500)
-      .json({ success: false, message: "Internal server error" });
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-// 🚪 Logout from All Devices
 export const logoutAllDevices = async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
 
     if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     user.refreshTokens = [];
@@ -186,14 +107,9 @@ export const logoutAllDevices = async (req, res) => {
     user.lastSeen = new Date();
     await user.save();
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Logged out from all devices" });
+    return res.status(200).json({ success: true, message: "Logged out from all devices" });
   } catch (err) {
-    console.error("Logout all error:", err.message);
-    return res
-      .status(500)
-      .json({ success: false, message: "Internal server error" });
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -207,23 +123,19 @@ export const cleanupExpiredTokens = async (userId) => {
 
     for (const token of user.refreshTokens) {
       try {
-        jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+        verifyRefreshToken(token);
         validTokens.push(token);
       } catch (error) {
-        console.log(" Removing expired token");
+        // Token expired or invalid
       }
     }
 
     if (validTokens.length !== user.refreshTokens.length) {
       user.refreshTokens = validTokens;
       await user.save();
-      console.log(
-        ` Cleaned up ${
-          user.refreshTokens.length - validTokens.length
-        } expired tokens`
-      );
     }
   } catch (error) {
     console.error("Token cleanup error:", error.message);
   }
 };
+

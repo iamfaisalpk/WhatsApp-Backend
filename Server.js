@@ -25,14 +25,22 @@ const server = http.createServer(app);
 connectDB();
 
 // Middlewares
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "500mb" }));
+app.use(express.urlencoded({ limit: "500mb", extended: true }));
 app.use(
   cors({
     origin: function (origin, callback) {
-      const allowedOrigins = [process.env.CLIENT_URL];
+      const allowedOrigins = [
+        process.env.CLIENT_URL,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+      ];
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.warn(`CORS blocked for origin: ${origin}`);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -74,7 +82,7 @@ app.use(errorHandler);
 // Socket.io setup
 setupSocket(server, app);
 
-server.timeout = 120000;
+server.timeout = 300000; // 5 minutes for large video uploads
 
 // Server Listen
 const PORT = process.env.PORT;

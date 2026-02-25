@@ -70,8 +70,27 @@ export const accessChat = async (req, res) => {
 
       chat = await Conversation.findById(chat._id).populate(
         "members",
-        "name profilePic isOnline lastSeen about phone"
+        "name profilePic isOnline lastSeen about phone blockedBy"
       );
+
+      // Sanitize for privacy if blocked
+      chat.members = chat.members.map(m => {
+        const mObj = m.toObject();
+        if (String(mObj._id) === String(req.user.id)) return mObj;
+
+        const isBlockedByMe = req.user.blockedUsers?.some(id => id.toString() === mObj._id.toString());
+        const isBlockedByThem = req.user.blockedBy?.some(id => id.toString() === mObj._id.toString());
+        
+        if (isBlockedByThem) {
+          mObj.profilePic = null; // They blocked me
+          mObj.about = "Hidden";
+          mObj.name = "User";
+          mObj.phone = "";
+        }
+        mObj.isBlockedByMe = isBlockedByMe;
+        mObj.isBlockedByThem = isBlockedByThem;
+        return mObj;
+      });
 
       const userIds = [currentUserId, userId];
       await Promise.all(
@@ -101,8 +120,27 @@ export const accessChat = async (req, res) => {
 
     const fullChat = await Conversation.findById(newChat._id).populate(
       "members",
-      "name profilePic isOnline lastSeen about phone"
+      "name profilePic isOnline lastSeen about phone blockedBy"
     );
+
+    // Sanitize for privacy if blocked
+    fullChat.members = fullChat.members.map(m => {
+      const mObj = m.toObject();
+      if (String(mObj._id) === String(req.user.id)) return mObj;
+
+      const isBlockedByMe = req.user.blockedUsers?.some(id => id.toString() === mObj._id.toString());
+      const isBlockedByThem = req.user.blockedBy?.some(id => id.toString() === mObj._id.toString());
+      
+      if (isBlockedByThem) {
+        mObj.profilePic = null;
+        mObj.about = "Hidden";
+        mObj.name = "User";
+        mObj.phone = "";
+      }
+      mObj.isBlockedByMe = isBlockedByMe;
+      mObj.isBlockedByThem = isBlockedByThem;
+      return mObj;
+    });
 
     await Promise.all(
       [currentUserId, userId].map((id) =>
@@ -148,7 +186,7 @@ export const fetchChats = async (req, res) => {
       )
       .populate(
         "members",
-        "name profilePic isOnline lastSeen savedName phone isBlocked isBlockedByMe about"
+        "name profilePic isOnline lastSeen savedName phone blockedBy about"
       )
       .populate("groupAdmin", "name profilePic about phone")
       .populate({
@@ -179,15 +217,30 @@ export const fetchChats = async (req, res) => {
 
         if (!chatObj.isGroup) {
           const otherUser = chatObj.members.find(
-            (m) => String(m._id) !== String(req.user.id)
+            (m) => m && String(m._id) !== String(req.user.id)
           );
 
-          if (
-            otherUser?.isBlocked === true ||
-            otherUser?.isBlockedByMe === true
-          ) {
+          // If other user is deleted, don't show the chat
+          if (!otherUser) {
             return null;
           }
+
+          // We no longer return null here for blocked users. 
+          // Instead, we will handle the privacy (hiding pic/last seen) in the frontend 
+          // or by sanitizing the otherUser object here.
+          
+          const isBlockedByMe = req.user.blockedUsers?.some(id => id.toString() === otherUser._id.toString());
+          const isBlockedByThem = req.user.blockedBy?.some(id => id.toString() === otherUser._id.toString());
+
+          if (isBlockedByThem) {
+            otherUser.profilePic = null; // They blocked me, so I can't see their pic
+            otherUser.about = "Hidden";
+            otherUser.name = "User";
+            otherUser.phone = "";
+          }
+          
+          otherUser.isBlockedByMe = isBlockedByMe;
+          otherUser.isBlockedByThem = isBlockedByThem;
         }
 
         let unreadCount = 0;
@@ -403,6 +456,12 @@ export const clearChat = async (req, res) => {
 
   try {
     await Message.deleteMany({ conversationId: chatId });
+    
+    const io = req.app.get("io");
+    if (io) {
+      io.to(chatId).emit("chat cleared", { chatId });
+    }
+
     res.status(200).json({ success: true, message: "Chat cleared" });
   } catch (error) {
     console.error(" Clear Chat Error:", error);

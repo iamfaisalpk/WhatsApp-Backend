@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 router.get('/', getMyProfile);
+router.get('/me', getMyProfile);
 
 router.put('/update', upload.any(), updateMyProfile);
 

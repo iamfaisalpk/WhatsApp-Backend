@@ -9,7 +9,8 @@ import {
     clearChatMessages,
     deleteMessage,
     deleteMessageForMe,
-    reactToMessage
+    reactToMessage,
+    getSharedMedia
 } from '../Controllers/messageController.js';
 
 
@@ -32,6 +33,7 @@ router.delete('/clear/:conversationId', authMiddleware, clearChatMessages);
 router.delete("/delete-message/:messageId", authMiddleware, deleteMessage);
 router.post("/delete-for-me/:messageId", authMiddleware, deleteMessageForMe);
 router.post("/react/:messageId", authMiddleware, reactToMessage);
+router.get("/shared-media/:conversationId", authMiddleware, getSharedMedia);
 
 
 export default router;
