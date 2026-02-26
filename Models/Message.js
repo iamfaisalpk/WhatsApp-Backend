@@ -92,4 +92,11 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Add indexes for high performance in production
+messageSchema.index({ conversationId: 1, createdAt: -1 });
+messageSchema.index({ sender: 1 });
+messageSchema.index({ readBy: 1 });
+messageSchema.index({ deletedFor: 1 });
+messageSchema.index({ tempId: 1 });
+
 export default mongoose.model("Message", messageSchema);
