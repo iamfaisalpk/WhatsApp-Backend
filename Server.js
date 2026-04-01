@@ -86,7 +86,7 @@ setupSocket(server, app);
 server.timeout = 300000; // 5 minutes for large video uploads
 
 // Server Listen
-const PORT = process.env.PORT;
+const PORT = process.env.PORT ;
 
 server.listen(PORT, () => {
   console.log(`\n Server running on http://localhost:${PORT}`);
