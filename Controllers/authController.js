@@ -37,7 +37,8 @@ export const sendOtp = async (req, res) => {
 
     const formattedPhone = formatPhoneNumber(phone);
     const otp = generateOTP();
-    const hashedOtp = await bcrypt.hash(otp, 10);
+    // Optimization: Reduce salt rounds for short-lived OTPs (performance boost)
+    const hashedOtp = await bcrypt.hash(otp, 8);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     const sessionId = uuidv4();
 
@@ -149,24 +150,9 @@ export const verifyOtp = async (req, res) => {
     user.refreshTokens = updatedTokens;
     await user.save();
 
-    //  Auto-create one-to-one chats with existing users if new
-    if (isNewUser) {
-      const allUsers = await User.find({ _id: { $ne: user._id } });
-
-      for (const otherUser of allUsers) {
-        const existingChat = await Conversation.findOne({
-          isGroup: false,
-          members: { $all: [user._id, otherUser._id] },
-        });
-
-        if (!existingChat) {
-          await Conversation.create({
-            isGroup: false,
-            members: [user._id, otherUser._id],
-          });
-        }
-      }
-    }
+    // Optimization: Removed the loop that auto-created chats with every user 
+    // to prevent performance degradation as the user base grows.
+    // Conversations will now be created on-demand when someone sends a message.
 
     return res.status(200).json({
       success: true,
