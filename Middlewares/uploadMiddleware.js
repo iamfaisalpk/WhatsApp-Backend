@@ -26,7 +26,7 @@ const storage = new CloudinaryStorage({
       allowed_formats: [
         "jpg", "jpeg", "png", "webp",
         "mp4", "webm", "mov", "avi", "mkv",
-        "mp3", "wav", "ogg", "m4a", "webm",
+        "mp3", "wav", "ogg", "m4a", "webm", "mp4",
         "pdf"
       ],
       transformation: isImage
@@ -46,7 +46,7 @@ const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     "image/jpeg", "image/jpg", "image/png", "image/webp",
     "video/mp4", "video/webm", "video/quicktime",
-    "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/x-m4a", "audio/m4a", "audio/webm",
+    "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/x-m4a", "audio/m4a", "audio/webm", "audio/mp4",
     "application/pdf"
   ];
 
