@@ -31,14 +31,15 @@ app.use(express.urlencoded({ limit: "500mb", extended: true }));
 app.use(
   cors({
     origin: function (origin, callback) {
+      if (process.env.NODE_ENV === "development" || !origin) {
+        return callback(null, true);
+      }
       const allowedOrigins = [
         process.env.CLIENT_URL,
         "http://localhost:5173",
-        "http://127.0.0.1:5173",
         "http://localhost:5174",
-        "http://127.0.0.1:5174",
       ];
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         console.warn(`CORS blocked for origin: ${origin}`);

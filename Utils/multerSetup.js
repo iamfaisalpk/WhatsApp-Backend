@@ -1,225 +1,123 @@
+import fs from 'fs';
+import path from 'path';
 import multer from 'multer';
-import CloudinaryStorage from 'multer-storage-cloudinary';
 import cloudinary from '../config/cloudinary.js';
 
-//  General storage configuration for regular uploads
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "whatsapp-clone/uploads",
-    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "mp4", "mov", "avi", "pdf", "doc", "docx"],
-    transformation: [{ quality: "auto" }],
-    resource_type: "auto"
+// Setup local disk storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
   },
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 
-//  Group Avatar specific storage configuration
-const groupAvatarStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "whatsapp-clone/group-avatars",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
-    transformation: [
-      { width: 500, height: 500, crop: "fill", gravity: "center" },
-      { quality: "auto", format: "webp" }
-    ],
-    resource_type: "image"
-  },
-});
+// A factory function to make customized Cloudinary middleware
+const makeCloudinaryMiddleware = (folder, optionsCallback) => async (req, res, next) => {
+  if (!req.files && !req.file) return next();
 
-//  Profile Avatar specific storage configuration
-const profileAvatarStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "whatsapp-clone/profile-avatars",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
-    transformation: [
-      { width: 300, height: 300, crop: "fill", gravity: "center" },
-      { quality: "auto", format: "webp" }
-    ],
-    resource_type: "image"
-  },
-});
+  try {
+    const uploadPromises = [];
 
-//  General file filter
+    const processFile = async (file) => {
+      const localPath = file.path;
+      const options = { folder, ...optionsCallback(file) };
+      
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_large(localPath, options, (error, res) => {
+          if (error) reject(error);
+          else resolve(res);
+        });
+      });
+      
+      if (result && result.secure_url) {
+        file.path = result.secure_url;
+      } else {
+        throw new Error("Missing secure_url from Cloudinary");
+      }
+
+      if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+    };
+
+    if (req.files) {
+      if (Array.isArray(req.files)) {
+        req.files.forEach(f => uploadPromises.push(processFile(f)));
+      } else {
+        Object.values(req.files).forEach(arr => arr.forEach(f => uploadPromises.push(processFile(f))));
+      }
+    } else if (req.file) {
+      uploadPromises.push(processFile(req.file));
+    }
+
+    await Promise.all(uploadPromises);
+    next();
+  } catch (err) {
+    console.error("Cloudinary custom middleware upload failed:", err);
+    next(err);
+  }
+};
+
+// General file filter
 const generalFileFilter = (req, file, cb) => {
-  console.log(" Uploading file:", file.originalname, "| Type:", file.mimetype);
-  
-  const allowedMimeTypes = [
-    // Images
+  const allowed = [
     "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
-    // Videos
     "video/mp4", "video/mov", "video/avi", "video/quicktime",
-    // Documents
     "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ];
-  
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    console.warn(" Rejected file type:", file.mimetype);
-    cb(new Error(`File type not allowed: ${file.mimetype}`));
-  }
+  if (allowed.includes(file.mimetype)) cb(null, true);
+  else cb(new Error(`File type not allowed: ${file.mimetype}`));
 };
 
-//  Group Avatar specific file filter
-const groupAvatarFileFilter = (req, file, cb) => {
-  console.log(" Uploading group avatar:", file.originalname, "| Type:", file.mimetype);
-  
-  const allowedMimeTypes = [
-    "image/jpeg", "image/jpg", "image/png", "image/webp"
-  ];
-  
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    console.warn(" Rejected file type for group avatar:", file.mimetype);
-    cb(new Error(`Only image files are allowed for group avatars. Received: ${file.mimetype}`));
-  }
+// Image filters
+const imageFileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/")) cb(null, true);
+  else cb(new Error(`Only image files are allowed. Received: ${file.mimetype}`));
 };
 
-//  Profile Avatar specific file filter
-const profileAvatarFileFilter = (req, file, cb) => {
-  console.log(" Uploading profile avatar:", file.originalname, "| Type:", file.mimetype);
-  
-  const allowedMimeTypes = [
-    "image/jpeg", "image/jpg", "image/png", "image/webp"
-  ];
-  
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    console.warn(" Rejected file type for profile avatar:", file.mimetype);
-    cb(new Error(`Only image files are allowed for profile avatars. Received: ${file.mimetype}`));
-  }
+// Multer instances
+const baseUpload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 }, fileFilter: generalFileFilter });
+const baseAvatarUpload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+
+// Cloudinary Midlewares
+const generalCloudinary = makeCloudinaryMiddleware("whatsapp-clone/uploads", () => ({ resource_type: "auto" }));
+const groupAvatarCloudinary = makeCloudinaryMiddleware("whatsapp-clone/group-avatars", () => ({
+  resource_type: "image",
+  transformation: [
+    { width: 500, height: 500, crop: "fill", gravity: "center" },
+    { quality: "auto", format: "webp" }
+  ]
+}));
+const profileAvatarCloudinary = makeCloudinaryMiddleware("whatsapp-clone/profile-avatars", () => ({
+  resource_type: "image",
+  transformation: [
+    { width: 300, height: 300, crop: "fill", gravity: "center" },
+    { quality: "auto", format: "webp" }
+  ]
+}));
+
+// Exports wrapping the middlewares in arrays for routing
+export const groupAvatarUpload = {
+  single: (field) => [baseAvatarUpload.single(field), groupAvatarCloudinary]
+};
+export const profileAvatarUpload = {
+  single: (field) => [baseAvatarUpload.single(field), profileAvatarCloudinary]
 };
 
-//  General upload middleware
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit for general files
-  },
-  fileFilter: generalFileFilter,
-});
+// Utility functions
+export const uploadSingle = (field) => [baseUpload.single(field), generalCloudinary];
+export const uploadFields = (fields) => [baseUpload.fields(fields), generalCloudinary];
+export const uploadAny = () => [baseUpload.any(), generalCloudinary];
+export const uploadGroupAvatar = (field = 'groupAvatar') => groupAvatarUpload.single(field);
+export const uploadProfileAvatar = (field = 'profileAvatar') => profileAvatarUpload.single(field);
 
-//  Group Avatar upload middleware
-export const groupAvatarUpload = multer({
-  storage: groupAvatarStorage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit for group avatars
-  },
-  fileFilter: groupAvatarFileFilter,
-});
-
-//  Profile Avatar upload middleware
-export const profileAvatarUpload = multer({
-  storage: profileAvatarStorage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit for profile avatars
-  },
-  fileFilter: profileAvatarFileFilter,
-});
-
-//  Image-only upload middleware (for general image uploads)
-export const imageUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit for images
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = [
-      "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"
-    ];
-    
-    if (allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Only image files are allowed. Received: ${file.mimetype}`));
-    }
-  },
-});
-
-//  Video-only upload middleware
-export const videoUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit for videos
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = [
-      "video/mp4", "video/mov", "video/avi", "video/quicktime"
-    ];
-    
-    if (allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Only video files are allowed. Received: ${file.mimetype}`));
-    }
-  },
-});
-
-//  Utility functions for different upload scenarios
-export const uploadSingle = (fieldName) => upload.single(fieldName);
-export const uploadFields = (fields) => upload.fields(fields);
-export const uploadAny = upload.any();
-export const uploadArray = (fieldName, maxCount = 10) => upload.array(fieldName, maxCount);
-
-//  Specialized upload functions
-export const uploadGroupAvatar = (fieldName = 'groupAvatar') => groupAvatarUpload.single(fieldName);
-export const uploadProfileAvatar = (fieldName = 'profileAvatar') => profileAvatarUpload.single(fieldName);
-export const uploadImage = (fieldName = 'image') => imageUpload.single(fieldName);
-export const uploadVideo = (fieldName = 'video') => videoUpload.single(fieldName);
-
-//  Multiple file uploads
-export const uploadMultipleImages = (fieldName = 'images', maxCount = 10) => 
-  imageUpload.array(fieldName, maxCount);
-
-//  Mixed field uploads for chat messages
-export const uploadChatFiles = uploadFields([
-  { name: 'image', maxCount: 5 },
-  { name: 'video', maxCount: 2 },
-  { name: 'document', maxCount: 3 }
-]);
-
-//  Error handling middleware
 export const handleMulterError = (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    switch (error.code) {
-      case 'LIMIT_FILE_SIZE':
-        return res.status(400).json({
-          success: false,
-          message: 'File size too large',
-          error: error.message
-        });
-      case 'LIMIT_FILE_COUNT':
-        return res.status(400).json({
-          success: false,
-          message: 'Too many files uploaded',
-          error: error.message
-        });
-      case 'LIMIT_UNEXPECTED_FILE':
-        return res.status(400).json({
-          success: false,
-          message: 'Unexpected file field',
-          error: error.message
-        });
-      default:
-        return res.status(400).json({
-          success: false,
-          message: 'File upload error',
-          error: error.message
-        });
-    }
+    return res.status(400).json({ success: false, message: 'File upload error: ' + error.code, error: error.message });
   } else if (error) {
-    return res.status(400).json({
-      success: false,
-      message: 'File validation error',
-      error: error.message
-    });
+    return res.status(400).json({ success: false, message: 'File validation error', error: error.message });
   }
   next();
 };
 
-
-export default upload;
+export default baseUpload;

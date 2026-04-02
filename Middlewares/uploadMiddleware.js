@@ -1,75 +1,104 @@
+import fs from "fs";
+import path from "path";
 import multer from "multer";
-import CloudinaryStorage from "multer-storage-cloudinary";
 import cloudinary from "../config/cloudinary.js";
 
-//  Logging Cloudinary environment check
-console.log(" Cloudinary Config Check:");
-console.log("  - CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME);
-console.log("  - API_KEY:", process.env.CLOUDINARY_API_KEY);
-console.log("  - API_SECRET:", process.env.CLOUDINARY_API_SECRET);
-
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-    const isImage = file.mimetype.startsWith("image");
-    const isAudio = file.mimetype.startsWith("audio");
-    const isVideo = file.mimetype.startsWith("video");
-
-    let folder = "whatsapp-clone/files";
-    if (isImage) folder = "whatsapp-clone/images";
-    else if (isAudio) folder = "whatsapp-clone/audio";
-    else if (isVideo) folder = "whatsapp-clone/video";
-
-    return {
-      folder,
-      resource_type: "auto", 
-      allowed_formats: [
-        "jpg", "jpeg", "png", "webp",
-        "mp4", "webm", "mov", "avi", "mkv",
-        "mp3", "wav", "ogg", "m4a", "webm", "mp4",
-        "pdf"
-      ],
-      transformation: isImage
-        ? [{ width: 500, height: 500, crop: "limit" }] 
-        : isVideo
-          ? [{ quality: "auto:good" }]
-          : [],
-      // For large video uploads, use chunked upload
-      ...(isVideo && { chunk_size: 6000000 }), // 6MB chunks
-    };
+// 1. Setup local disk storage for robust file handling
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
   },
 });
 
 const fileFilter = (req, file, cb) => {
   console.log(" Uploading file:", file.originalname, "| Type:", file.mimetype);
-
-  const allowedMimeTypes = [
-    "image/jpeg", "image/jpg", "image/png", "image/webp",
-    "video/mp4", "video/webm", "video/quicktime",
-    "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/x-m4a", "audio/m4a", "audio/webm", "audio/mp4",
-    "application/pdf"
-  ];
-
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    console.warn(" Rejected file type:", file.mimetype);
-    cb(new Error(`File type not allowed: ${file.mimetype}`));
-  }
+  cb(null, true);
 };
 
-//  Multer setup
-const upload = multer({
+const baseUpload = multer({
   storage,
-  limits: {
-    fileSize: 500 * 1024 * 1024, // 500MB max for video support
-  },
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
   fileFilter,
 });
 
-//  Export reusable middlewares
-export const uploadSingle = (fieldName) => upload.single(fieldName); 
-export const uploadFields = (fields) => upload.fields(fields);       
-export const uploadAny = upload.any();                                
+// 2. Custom middleware to upload to Cloudinary and convert req.files
+const uploadToCloudinary = async (req, res, next) => {
+  if (!req.files && !req.file) return next();
+
+  try {
+    const uploadPromises = [];
+
+    const processFile = async (file) => {
+      const isImage = file.mimetype.startsWith("image");
+      const isAudio = file.mimetype.startsWith("audio");
+      const isVideo = file.mimetype.startsWith("video");
+
+      let folder = "whatsapp-clone/files";
+      if (isImage) folder = "whatsapp-clone/images";
+      else if (isAudio) folder = "whatsapp-clone/audio";
+      else if (isVideo) folder = "whatsapp-clone/video";
+
+      const options = {
+        folder,
+        resource_type: "auto",
+      };
+
+      if (isImage) {
+        options.transformation = [{ width: 1000, height: 1000, crop: "limit" }];
+      }
+
+      const localPath = file.path;
+      
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_large(localPath, options, (error, res) => {
+          if (error) reject(error);
+          else resolve(res);
+        });
+      });
+      
+      if (result && result.secure_url) {
+        file.path = result.secure_url;
+      } else {
+        console.error("Cloudinary did not return a secure_url", result);
+        throw new Error("Missing secure_url from Cloudinary");
+      }
+
+      if (fs.existsSync(localPath)) fs.unlinkSync(localPath); // Cleanup
+    };
+
+    if (req.files) {
+      if (Array.isArray(req.files)) {
+        req.files.forEach((file) => uploadPromises.push(processFile(file)));
+      } else {
+        Object.keys(req.files).forEach((field) => {
+          req.files[field].forEach((file) => uploadPromises.push(processFile(file)));
+        });
+      }
+    } else if (req.file) {
+      uploadPromises.push(processFile(req.file));
+    }
+
+    await Promise.all(uploadPromises);
+    next();
+  } catch (err) {
+    console.error("Cloudinary upload failed:", err);
+    next(err);
+  }
+};
+
+const upload = {
+  single: (field) => [baseUpload.single(field), uploadToCloudinary],
+  fields: (fields) => [baseUpload.fields(fields), uploadToCloudinary],
+  any: () => [baseUpload.any(), uploadToCloudinary],
+};
+
+export const uploadSingle = upload.single;
+export const uploadFields = upload.fields;
+export const uploadAny = upload.any;
 
 export default upload;

@@ -62,7 +62,7 @@ export const sendMessage = async (req, res) => {
       };
     }
 
-    const newMessage = await Message.create({
+    const newMessageData = {
       conversationId,
       sender: senderId,
       text: text?.trim() || null,
@@ -73,7 +73,10 @@ export const sendMessage = async (req, res) => {
       readBy: [senderId],
       status: "sent",
       tempId: tempId || null,
-    });
+    };
+    console.log("💾 Saving new message to DB:", newMessageData);
+    const newMessage = await Message.create(newMessageData);
+    console.log("✅ Message saved successfully:", newMessage._id);
 
     // Update conversation with last message
     const updatedConversation = await Conversation.findByIdAndUpdate(
