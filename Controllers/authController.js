@@ -100,45 +100,44 @@ export const verifyOtp = async (req, res) => {
     }
 
     if (!isMatch) {
-      otpEntry.attempts += 1;
-      await otpEntry.save();
+      await Otp.findOneAndUpdate(
+        { phone: formattedPhone, sessionId },
+        { $inc: { attempts: 1 } }
+      );
       return res.status(400).json({
         success: false,
         message: "Invalid OTP",
-        attemptsRemaining: 3 - otpEntry.attempts,
+        attemptsRemaining: 2 - otpEntry.attempts,
       });
     }
 
     await Otp.deleteOne({ phone: formattedPhone, sessionId });
 
-    let user = await User.findOne({ phone: formattedPhone }).select("+refreshTokens");
-    let isNewUser = false;
-
+    // Ensure user exists and get their ID
+    let user = await User.findOne({ phone: formattedPhone });
     if (!user) {
       user = await User.create({
         phone: formattedPhone,
         isVerified: true,
         isOnline: true,
         lastLogin: new Date(),
-        refreshTokens: [],
       });
-      isNewUser = true;
-    } else {
-      user.isVerified = true;
-      user.isOnline = true;
-      user.lastLogin = new Date();
     }
 
-    //  Generate tokens
+    // Generate tokens using the real user ID
     const { accessToken, refreshToken } = generateTokens(user._id);
     const cleanRefreshToken = refreshToken.trim();
-    const existingTokens = (user.refreshTokens || []).map((t) => t.trim());
-    const updatedTokens = [
-      ...new Set([...existingTokens, cleanRefreshToken]),
-    ].slice(-10);
 
-    user.refreshTokens = updatedTokens;
-    await user.save();
+    // Update tokens and login status
+    await User.findByIdAndUpdate(user._id, {
+      $set: { isVerified: true, isOnline: true, lastLogin: new Date() },
+      $push: { 
+        refreshTokens: { 
+          $each: [cleanRefreshToken], 
+          $slice: -10 
+        } 
+      }
+    });
 
 
     return res.status(200).json({
