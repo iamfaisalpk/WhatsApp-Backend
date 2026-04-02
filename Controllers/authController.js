@@ -1,10 +1,8 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import client from "../config/twilioClient.js";
 import User from "../Models/User.js";
 import Otp from "../Models/Otp.js";
-import Conversation from "../Models/Conversation.js";
 import bcrypt from "bcryptjs";
 import { generateTokens } from "../Utils/jwtUtils.js";
 import { v4 as uuidv4 } from "uuid";
@@ -142,9 +140,6 @@ export const verifyOtp = async (req, res) => {
     user.refreshTokens = updatedTokens;
     await user.save();
 
-    // Optimization: Removed the loop that auto-created chats with every user 
-    // to prevent performance degradation as the user base grows.
-    // Conversations will now be created on-demand when someone sends a message.
 
     return res.status(200).json({
       success: true,
