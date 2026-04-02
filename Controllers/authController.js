@@ -16,10 +16,8 @@ const generateOTP = () =>
 
 const formatPhoneNumber = (rawPhone) => {
   let phone = rawPhone.trim();
-  // If it already starts with +, trust it
   if (phone.startsWith("+")) return phone;
   
-  // Default legacy logic for handling numbers without +
   phone = phone.replace(/\D/g, "");
   if (phone.length === 10) return "+91" + phone;
   if (!phone.startsWith("+")) return "+" + phone;
@@ -37,27 +35,21 @@ export const sendOtp = async (req, res) => {
 
     const formattedPhone = formatPhoneNumber(phone);
     const otp = generateOTP();
-    // Optimization: Reduce salt rounds for short-lived OTPs (performance boost)
     const hashedOtp = await bcrypt.hash(otp, 8);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     const sessionId = uuidv4();
 
-    await Otp.deleteMany({ phone: formattedPhone });
+    await Otp.findOneAndUpdate(
+      { phone: formattedPhone },
+      { code: hashedOtp, expiresAt, sessionId, attempts: 0 },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
-    const newOtp = new Otp({
-      phone: formattedPhone,
-      code: hashedOtp,
-      expiresAt,
-      sessionId,
-    });
-    await newOtp.save();
-
-    // For development, we return the OTP in the response to bypass real SMS
     return res.status(200).json({
       success: true,
-      message: "Test mode: OTP generated successfully",
+      message: "OTP generated successfully",
       phone: formattedPhone,
-      otp, // Returning OTP directly for testing
+      otp,
       sessionId,
     });
   } catch (err) {
